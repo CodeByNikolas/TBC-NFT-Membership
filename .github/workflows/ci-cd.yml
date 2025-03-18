@@ -35,6 +35,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # Convert repository name to lowercase for Docker tags
+      - name: Prepare Docker Tags
+        id: prep
+        run: |
+          REPO_LOWERCASE="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "REPO_LOWERCASE=$REPO_LOWERCASE" >> $GITHUB_ENV
+          echo "lowercase repository name: $REPO_LOWERCASE"
+
       # Build the application for testing (if you have tests)
       # - name: Build & Run Tests
       #   uses: docker/build-push-action@v4
@@ -45,7 +53,7 @@ jobs:
       #       NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
       #     load: true
       #     tags: tbc-wallet-demo:test
-      #     cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
+      #     cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache
           
       # Build and push the production image
       - name: Build & Push Production Image
@@ -58,10 +66,10 @@ jobs:
           build-args: |
             NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
           tags: |
-            ghcr.io/${{ github.repository }}:prod
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
-          cache-to: ${{ github.event_name != 'pull_request' && 'type=registry,ref=ghcr.io/${{ github.repository }}:cache,mode=max' || 'type=inline' }}
+            ghcr.io/${{ env.REPO_LOWERCASE }}:latest
+            ghcr.io/${{ env.REPO_LOWERCASE }}:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache,mode=max' || 'type=inline' }}
       
       # Cloudflare cache purging for specific URL
       - name: Purge Cloudflare Cache for Specific URL
@@ -86,5 +94,5 @@ jobs:
           echo "============= Build Performance Summary ============="
           echo "Workflow duration: ${{ github.run_id }} (${{ steps.docker_build.outputs.buildDuration || 'N/A' }}s)"
           echo "Node modules cache: ${{ steps.cache-node.outputs.cache-hit == 'true' && 'HIT ✅' || 'MISS ❌' }}"
-          echo "Docker layer cache: Using registry cache at ghcr.io/${{ github.repository }}:cache"
+          echo "Docker layer cache: Using registry cache at ghcr.io/${{ env.REPO_LOWERCASE }}:cache"
           echo "=====================================================" 
