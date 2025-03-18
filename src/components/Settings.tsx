@@ -235,7 +235,40 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
         <div className="px-6 py-4">
           <div className="space-y-6">
             <div>
-              <h4 className="text-base font-medium text-gray-900 mb-2">IPFS Pinata</h4>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-base font-medium text-gray-900">IPFS Pinata</h4>
+                <a
+                  href="https://docs.pinata.cloud/reference/pinning-api" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium hover:bg-blue-200 transition-colors"
+                >
+                  Documentation
+                </a>
+              </div>
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4 text-sm text-blue-700 rounded">
+                <p>
+                  <span className="font-semibold">How to get keys:</span> Sign up at{' '}
+                  <a 
+                    href="https://app.pinata.cloud/register" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-medium underline hover:text-blue-800"
+                  >
+                    Pinata Cloud
+                  </a>
+                  {' '}and create an API key in the{' '}
+                  <a 
+                    href="https://app.pinata.cloud/developers/api-keys" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-medium underline hover:text-blue-800"
+                  >
+                    API Keys section
+                  </a>. 
+                  The free tier should be enough.
+                </p>
+              </div>
               <div className="space-y-3">
                 <div>
                   <label htmlFor="ipfsPinataKey" className="block text-sm font-medium text-gray-700 mb-1">
@@ -288,13 +321,46 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
             </div>
             
             <div>
-              <h4 className="text-base font-medium text-gray-900 mb-2">RPC Infura</h4>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-base font-medium text-gray-900">RPC Infura</h4>
+                <a
+                  href="https://docs.infura.io/api/networks/ethereum/json-rpc-methods" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium hover:bg-blue-200 transition-colors"
+                >
+                  Documentation
+                </a>
+              </div>
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4 text-sm text-blue-700 rounded">
+                <p>
+                  <span className="font-semibold">How to get key:</span> Create an account at{' '}
+                  <a 
+                    href="https://app.infura.io/register" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-medium underline hover:text-blue-800"
+                  >
+                    Infura
+                  </a>
+                  {' '}and create a new API key in the{' '}
+                  <a 
+                    href="https://app.infura.io/dashboard" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-medium underline hover:text-blue-800"
+                  >
+                    Dashboard
+                  </a>. 
+                  The free tier should be more than enough.
+                </p>
+              </div>
               <div>
                 <label htmlFor="infuraKey" className="block text-sm font-medium text-gray-700 mb-1">
                   API Key
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   id="infuraKey"
                   value={infuraKey}
                   onChange={handleInfuraKeyChange}

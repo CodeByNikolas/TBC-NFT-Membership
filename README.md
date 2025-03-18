@@ -8,14 +8,18 @@ A simple Next.js application demonstrating wallet connection and network switchi
 - Support for multiple EVM chains: Ethereum, Arbitrum, Optimism, Polygon
 - Network switching capability
 - Clean UI with shadcn components
+- Settings panel for API keys (Pinata and Infura)
 
 ## Prerequisites
 
 - Node.js 18+ 
 - npm or yarn
 - WalletConnect Cloud Project ID
+- Docker (optional, for containerized deployment)
 
 ## Getting Started
+
+### Local Development
 
 1. Clone the repository:
 ```bash
@@ -31,9 +35,12 @@ yarn install
 ```
 
 3. Set up environment variables:
-   - Create a `.env` file in the root directory
+   - Copy the sample environment file:
+   ```bash
+   cp .env.example .env.local
+   ```
    - Get a Project ID from [Reown Cloud](https://cloud.reown.com) by creating an account and a new project
-   - Add your Project ID to the `.env` file:
+   - Add your Project ID to the `.env.local` file:
    ```
    NEXT_PUBLIC_PROJECT_ID=your_project_id_here
    ```
@@ -47,11 +54,50 @@ yarn dev
 
 5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Docker Deployment
+
+1. Make sure you have Docker and Docker Compose installed.
+
+2. Build and run the Docker container:
+```bash
+# Build the container
+docker build -t wallet-demo .
+
+# Run the container
+docker run -p 3000:3000 -e NEXT_PUBLIC_PROJECT_ID=your_project_id_here wallet-demo
+```
+
+Alternatively, use Docker Compose:
+```bash
+# Create a .env file with your NEXT_PUBLIC_PROJECT_ID
+echo "NEXT_PUBLIC_PROJECT_ID=your_project_id_here" > .env
+
+# Build and run with Docker Compose
+docker-compose up -d
+```
+
+## API Keys Configuration
+
+The application supports configuring API keys for:
+- **IPFS Pinata**: For storing files on IPFS
+- **Infura**: For RPC provider access
+
+These keys can be configured in the settings panel (gear icon in the navbar) and will be stored in your browser's localStorage.
+
+## GitHub Actions Deployment
+
+This project includes a GitHub Actions workflow for continuous integration and deployment. To use it:
+
+1. Enable GitHub Actions for your repository
+2. Set up the following secrets in your repository settings:
+   - `NEXT_PUBLIC_PROJECT_ID`: Your WalletConnect Project ID from [Reown Cloud](https://cloud.reown.com)
+
 ## How to Use
 
 1. Click the "Connect Wallet" button to connect your crypto wallet.
 2. Once connected, you'll see a "Network Selection" button appear.
 3. Use this button to switch between different blockchain networks.
+4. Click the gear icon to access settings for API keys.
 
 ## Technologies Used
 
@@ -60,6 +106,8 @@ yarn dev
 - [shadcn/ui](https://ui.shadcn.com/) - UI component library
 - [WalletConnect AppKit](https://docs.reown.com/appkit/overview) - Wallet connection SDK
 - [wagmi](https://wagmi.sh/) - React hooks for Ethereum
+- [Docker](https://www.docker.com/) - Containerization platform
+- [GitHub Actions](https://github.com/features/actions) - CI/CD workflow
 
 ## Learn More
 

@@ -1,0 +1,90 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Add cache for npm dependencies
+      - name: Cache node modules
+        id: cache-node
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Build the application for testing (if you have tests)
+      # - name: Build & Run Tests
+      #   uses: docker/build-push-action@v4
+      #   with:
+      #     context: .
+      #     target: test
+      #     build-args: |
+      #       NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
+      #     load: true
+      #     tags: tbc-wallet-demo:test
+      #     cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
+          
+      # Build and push the production image
+      - name: Build & Push Production Image
+        id: docker_build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
+          tags: |
+            ghcr.io/${{ github.repository }}:prod
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=registry,ref=ghcr.io/${{ github.repository }}:cache,mode=max' || 'type=inline' }}
+      
+      # Cloudflare cache purging for specific URL
+      - name: Purge Cloudflare Cache for Specific URL
+        if: github.event_name != 'pull_request'
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"hosts":["TBC-NFT.nikolashack.com"]}')
+          
+          echo "Cloudflare API Response: $RESPONSE"
+          
+          if echo "$RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo "✅ Cloudflare cache purged successfully for TBC-NFT.nikolashack.com!"
+          else
+            echo "❌ Failed to purge Cloudflare cache! Check the response for details."
+            exit 1
+          fi
+          
+      - name: Display Build Cache Stats
+        run: |
+          echo "============= Build Performance Summary ============="
+          echo "Workflow duration: ${{ github.run_id }} (${{ steps.docker_build.outputs.buildDuration || 'N/A' }}s)"
+          echo "Node modules cache: ${{ steps.cache-node.outputs.cache-hit == 'true' && 'HIT ✅' || 'MISS ❌' }}"
+          echo "Docker layer cache: Using registry cache at ghcr.io/${{ github.repository }}:cache"
+          echo "=====================================================" 
