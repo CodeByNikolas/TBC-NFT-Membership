@@ -25,7 +25,7 @@ export default function ContactCreation() {
             <h2 className="text-2xl font-semibold text-yellow-700">Under Construction</h2>
           </div>
           <p className="text-gray-600 text-lg">
-            We're currently building this exciting feature. Check back soon for updates!
+            We&apos;re currently building this exciting feature. Check back soon for updates!
           </p>
         </div>
       </div>

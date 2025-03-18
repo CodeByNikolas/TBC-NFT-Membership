@@ -21,30 +21,8 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
   const [pinataMessage, setPinataMessage] = useState('');
   const [infuraMessage, setInfuraMessage] = useState('');
   
-  // Load saved settings from localStorage when component mounts
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedIpfsPinataKey = localStorage.getItem('ipfsPinataKey') || '';
-      const savedIpfsPinataSecret = localStorage.getItem('ipfsPinataSecret') || '';
-      const savedInfuraKey = localStorage.getItem('infuraKey') || '';
-      
-      setIpfsPinataKey(savedIpfsPinataKey);
-      setIpfsPinataSecret(savedIpfsPinataSecret);
-      setInfuraKey(savedInfuraKey);
-      
-      // Validate existing keys on load
-      if (savedIpfsPinataKey && savedIpfsPinataSecret) {
-        validatePinataCredentials(savedIpfsPinataKey, savedIpfsPinataSecret);
-      }
-      
-      if (savedInfuraKey) {
-        validateInfuraCredentials(savedInfuraKey);
-      }
-    }
-  }, []);
-  
   // Validate Pinata API credentials
-  const validatePinataCredentials = async (key: string, secret: string) => {
+  const validatePinataCredentials = useCallback(async (key: string, secret: string) => {
     if (!key || !secret) {
       setPinataStatus('idle');
       setPinataMessage('');
@@ -71,15 +49,17 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
         setPinataMessage('Invalid Pinata credentials');
       }
     } catch (error) {
+      // Explicitly ignore the error but log it in a way ESLint accepts
+      console.error('Pinata validation error:', error);
       setPinataStatus('error');
       setPinataMessage('Error validating Pinata credentials');
     } finally {
       setIsPinataValidating(false);
     }
-  };
+  }, []);
   
   // Validate Infura API key
-  const validateInfuraCredentials = async (key: string) => {
+  const validateInfuraCredentials = useCallback(async (key: string) => {
     if (!key) {
       setInfuraStatus('idle');
       setInfuraMessage('');
@@ -113,30 +93,60 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
         setInfuraMessage('Invalid Infura API key');
       }
     } catch (error) {
+      // Explicitly ignore the error but log it in a way ESLint accepts
+      console.error('Infura validation error:', error);
       setInfuraStatus('error');
       setInfuraMessage('Error validating Infura API key');
     } finally {
       setIsInfuraValidating(false);
     }
-  };
+  }, []);
   
-  // Debounced validation functions
-  const debouncedValidatePinata = useCallback(
-    debounce((key: string, secret: string) => {
+  // Load saved settings from localStorage when component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedIpfsPinataKey = localStorage.getItem('ipfsPinataKey') || '';
+      const savedIpfsPinataSecret = localStorage.getItem('ipfsPinataSecret') || '';
+      const savedInfuraKey = localStorage.getItem('infuraKey') || '';
+      
+      setIpfsPinataKey(savedIpfsPinataKey);
+      setIpfsPinataSecret(savedIpfsPinataSecret);
+      setInfuraKey(savedInfuraKey);
+      
+      // Validate existing keys on load
+      if (savedIpfsPinataKey && savedIpfsPinataSecret) {
+        validatePinataCredentials(savedIpfsPinataKey, savedIpfsPinataSecret);
+      }
+      
+      if (savedInfuraKey) {
+        validateInfuraCredentials(savedInfuraKey);
+      }
+    }
+  }, [validatePinataCredentials, validateInfuraCredentials]);
+  
+  // Create debounced versions of the validation functions
+  const debouncedValidatePinata = useCallback((key: string, secret: string) => {
+    const handler = debounce(() => {
       validatePinataCredentials(key, secret);
-    }, 800),
-    []
-  );
+    }, 800);
+    
+    handler();
+    
+    return handler;
+  }, [validatePinataCredentials]);
   
-  const debouncedValidateInfura = useCallback(
-    debounce((key: string) => {
+  const debouncedValidateInfura = useCallback((key: string) => {
+    const handler = debounce(() => {
       validateInfuraCredentials(key);
-    }, 800),
-    []
-  );
+    }, 800);
+    
+    handler();
+    
+    return handler;
+  }, [validateInfuraCredentials]);
   
   // Handle Pinata input changes
-  const handlePinataKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePinataKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newKey = e.target.value;
     setIpfsPinataKey(newKey);
     
@@ -148,9 +158,9 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
       setPinataStatus('idle');
       setPinataMessage('');
     }
-  };
+  }, [ipfsPinataSecret, debouncedValidatePinata]);
   
-  const handlePinataSecretChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePinataSecretChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newSecret = e.target.value;
     setIpfsPinataSecret(newSecret);
     
@@ -162,10 +172,10 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
       setPinataStatus('idle');
       setPinataMessage('');
     }
-  };
+  }, [ipfsPinataKey, debouncedValidatePinata]);
   
   // Handle Infura input changes
-  const handleInfuraKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInfuraKeyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newKey = e.target.value;
     setInfuraKey(newKey);
     
@@ -177,9 +187,9 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
       setInfuraStatus('idle');
       setInfuraMessage('');
     }
-  };
+  }, [debouncedValidateInfura]);
   
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     // Save valid configurations only
     if (ipfsPinataKey && ipfsPinataSecret) {
       if (pinataStatus === 'success' || pinataStatus === 'idle') {
@@ -202,7 +212,7 @@ export default function Settings({ isOpen, onClose }: SettingsProps) {
     }
     
     onClose();
-  };
+  }, [ipfsPinataKey, ipfsPinataSecret, infuraKey, pinataStatus, infuraStatus, onClose]);
   
   const getStatusColor = (status: 'idle' | 'success' | 'error') => {
     switch (status) {
