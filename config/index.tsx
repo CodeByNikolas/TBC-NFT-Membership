@@ -5,7 +5,7 @@ import { mainnet, sepolia, arbitrum, optimism, polygon, polygonAmoy } from '@reo
 // Get projectId from https://cloud.reown.com
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID || '';
 
-// Define networks we want to support
+// Define networks we want to support - ensure at least one network (mainnet) is always included
 export const networks = [mainnet, sepolia, arbitrum, optimism, polygon, polygonAmoy];
 
 // Set up the Wagmi Adapter (config)
