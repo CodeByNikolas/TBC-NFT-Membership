@@ -69,7 +69,7 @@ jobs:
             ghcr.io/${{ env.REPO_LOWERCASE }}:latest
             ghcr.io/${{ env.REPO_LOWERCASE }}:${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache
-          cache-to: ${{ github.event_name != 'pull_request' && 'type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache,mode=max' || 'type=inline' }}
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:cache,mode=max', env.REPO_LOWERCASE) || 'type=inline' }}
       
       # Cloudflare cache purging for specific URL
       - name: Purge Cloudflare Cache for Specific URL
