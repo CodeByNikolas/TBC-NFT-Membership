@@ -68,11 +68,22 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
+            NEXT_TELEMETRY_DISABLED=1
+            NODE_ENV=production
           # Don't tag the platform-specific images, only push by digest
           outputs: type=image,name=ghcr.io/${{ env.REPO_LOWERCASE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:cache-{1},mode=max', env.REPO_LOWERCASE, env.PLATFORM_TAG) || 'type=inline' }}
-        
+        # Save build logs for later analysis
+        env:
+          BUILDKIT_PROGRESS: plain
+        # tee to save logs to file
+        # Use tee command to capture logs for stats analysis
+      
+      # Extract logs from docker build for statistics
+      - name: Extract Build Logs
+        run: docker buildx build --progress=plain --no-cache=false . 2>&1 | tee /tmp/build_logs.txt || true
+      
       # Save digests for later use in the manifest job
       - name: Output Digest
         id: digest
@@ -106,8 +117,21 @@ jobs:
         run: |
           echo "============= Build Performance Summary for ${{ matrix.platform }} ============="
           echo "Platform build duration: ${{ steps.docker_build.outputs.buildDuration || 'N/A' }}s"
-          echo "Node modules cache: ${{ steps.cache-node.outputs.cache-hit == 'true' && 'HIT ✅' || 'MISS ❌' }}"
+          
+          # Cache status with emojis
+          if [[ "${{ steps.cache-node.outputs.cache-hit }}" == "true" ]]; then
+            echo "Node modules cache: HIT ✅"
+          else
+            echo "Node modules cache: MISS ❌"
+          fi
+          
+          # Docker layer cache status (inferred)
           echo "Docker layer cache: Using registry cache at ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}"
+          
+          # Show build summary by stage
+          echo "Build summary:"
+          echo "  📦 Dependencies installation: $(grep -o 'RUN npm ci.*DONE [0-9.]*s' /tmp/build_logs.txt 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')"
+          echo "  🔨 Next.js build step: $(grep -o 'Creating an optimized production build.*Generating static pages' /tmp/build_logs.txt -A 1 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')"
           echo "=============================================================="
 
   # Create a multi-platform manifest
@@ -151,35 +175,24 @@ jobs:
           echo "Files in /tmp/digests/:"
           ls -la /tmp/digests/
           
-          # Create comma-separated list of digests
-          DIGESTS=""
-          for digest in /tmp/digests/*; do
-            PLATFORM=$(basename "$digest" | tr '-' '/')
-            DIGEST_VALUE=$(cat "$digest")
-            DIGESTS="${DIGESTS}${DIGESTS:+,}${PLATFORM}@${DIGEST_VALUE}"
-            echo "Processing $digest: Platform=$PLATFORM, Digest=$DIGEST_VALUE"
+          # Create properly formatted manifest args
+          MANIFEST_ARGS=""
+          for digest_file in /tmp/digests/*; do
+            PLATFORM=$(basename "$digest_file" | tr '-' '/')
+            DIGEST_VALUE=$(cat "$digest_file")
+            echo "Processing $digest_file: Platform=$PLATFORM, Digest=$DIGEST_VALUE"
+            MANIFEST_ARGS="$MANIFEST_ARGS --amend $DIGEST_VALUE"
           done
           
-          echo "Creating manifest with digests: $DIGESTS"
-          
-          # Create array of digest arguments to avoid sed issues
-          REPO="ghcr.io/${{ env.REPO_LOWERCASE }}"
-          DIGEST_ARGS=""
-          
-          # Convert comma-separated digests to space-separated list with full URLs
-          IFS=',' read -ra DIGEST_ARRAY <<< "$DIGESTS"
-          for i in "${DIGEST_ARRAY[@]}"; do
-            DIGEST_ARGS="$DIGEST_ARGS $REPO@$i"
-          done
-          
-          echo "Creating manifest with args: $DIGEST_ARGS"
+          echo "Creating manifest with args: $MANIFEST_ARGS"
           
           # Use Docker manifest command to create the multi-platform image
+          REPO="ghcr.io/${{ env.REPO_LOWERCASE }}"
           docker buildx imagetools create \
             --tag $REPO:latest \
             --tag $REPO:prod \
             --tag $REPO:${{ github.sha }} \
-            $DIGEST_ARGS
+            $MANIFEST_ARGS
             
       # Cloudflare cache purging
       - name: Purge Cloudflare Cache for Specific URL
