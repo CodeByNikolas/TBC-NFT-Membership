@@ -12,6 +12,7 @@ jobs:
   # First build each platform in parallel
   build-platform:
     name: Build ${{ matrix.platform }}
+    # Use standard runner for all platforms (free tier)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -70,6 +71,10 @@ jobs:
             NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
             NEXT_TELEMETRY_DISABLED=1
             NODE_ENV=production
+            NPM_CONFIG_LOGLEVEL=error
+            NPM_CONFIG_FUND=false
+            NPM_CONFIG_AUDIT=false
+            NEXT_WEBPACK_MEMORY_LIMIT=4096
           # Don't tag the platform-specific images, only push by digest
           outputs: type=image,name=ghcr.io/${{ env.REPO_LOWERCASE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}
@@ -77,6 +82,9 @@ jobs:
         # Save build logs for later analysis
         env:
           BUILDKIT_PROGRESS: plain
+          DOCKER_BUILDKIT: 1
+          BUILDKIT_STEP_LOG_MAX_SIZE: 10485760 # Increase log size to 10MB
+          BUILDKIT_STEP_LOG_MAX_SPEED: 1048576 # Increase log speed
         # tee to save logs to file
         # Use tee command to capture logs for stats analysis
       

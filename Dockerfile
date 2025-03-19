@@ -1,58 +1,70 @@
-# Build stage
-FROM node:18-alpine as builder
+FROM node:18-alpine AS base
 
-# Disable Next.js telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
+# Set working directory
+WORKDIR /app
 
-# Optimize Node.js for containerized environments
+# Optimize npm and Node.js settings
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV NPM_CONFIG_LOGLEVEL=error
 ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_AUDIT=false
-ENV NEXT_SHARP_PATH=/tmp
 
-# Performance optimizations
-ENV NEXT_WEBPACK_MEMORY_LIMIT=4096
+# Install dependencies only when needed
+FROM base AS deps
 
-WORKDIR /app
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++ libc6-compat
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
-
-# Install dependencies first (for better caching)
+# Copy package files
 COPY package.json package-lock.json ./
+
+# Install dependencies with specific flags for better ARM64 compatibility
 RUN npm ci
 
-# Copy source code
+# Development dependencies for build stage
+FROM base AS builder
+WORKDIR /app
+
+# Optimize Node.js memory usage for faster builds
+ENV NEXT_SHARP_PATH=/tmp
+ENV NEXT_WEBPACK_MEMORY_LIMIT=4096
+
+# Copy dependency files from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+
+# Copy all files 
 COPY . .
 
-# Accept build arguments for Next.js public environment variables
+# Inject build-time env variables
 ARG NEXT_PUBLIC_PROJECT_ID
 ENV NEXT_PUBLIC_PROJECT_ID=$NEXT_PUBLIC_PROJECT_ID
 
-# Build the Next.js application
+# Build the application
 RUN npm run build
 
-# Production image, copy built app and run
-FROM node:18-alpine
-
-# Disable telemetry in production as well
-ENV NEXT_TELEMETRY_DISABLED=1 
-ENV NODE_ENV=production
-ENV PORT=3000
-
+# Production image, copy all the files and run next
+FROM base AS runner
 WORKDIR /app
 
-# Install only production dependencies
-RUN npm ci --only=production
+# Environment variables
+ENV PORT=3000
 
-# Copy built application from builder stage
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.js ./
+# Create a non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# Expose the port the app runs on
+# For Next.js standalone output
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Use the non-root user 
+USER nextjs
+
+# Expose the port
 EXPOSE 3000
 
-# Start the application
-CMD ["node_modules/.bin/next", "start"] 
+# Run the application
+CMD ["node", "server.js"] 
