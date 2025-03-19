@@ -9,13 +9,11 @@ const nextConfig = {
   experimental: {
     // Enable memory optimizations
     optimizeCss: true,
-    // turbotrace removed as it's no longer supported in Next.js 15
   },
   compiler: {
     // Disable React server components features we don't use for smaller builds
     removeConsole: process.env.NODE_ENV === 'production',
-    // SWC minify moved here from root config
-    minify: true,
+    // minify removed as it's no longer supported in Next.js 15
   },
   // Only build the pages we actually need
   typescript: {
