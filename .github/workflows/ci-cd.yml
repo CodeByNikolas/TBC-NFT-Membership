@@ -162,12 +162,24 @@ jobs:
           
           echo "Creating manifest with digests: $DIGESTS"
           
+          # Create array of digest arguments to avoid sed issues
+          REPO="ghcr.io/${{ env.REPO_LOWERCASE }}"
+          DIGEST_ARGS=""
+          
+          # Convert comma-separated digests to space-separated list with full URLs
+          IFS=',' read -ra DIGEST_ARRAY <<< "$DIGESTS"
+          for i in "${DIGEST_ARRAY[@]}"; do
+            DIGEST_ARGS="$DIGEST_ARGS $REPO@$i"
+          done
+          
+          echo "Creating manifest with args: $DIGEST_ARGS"
+          
           # Use Docker manifest command to create the multi-platform image
           docker buildx imagetools create \
-            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:latest \
-            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:prod \
-            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:${{ github.sha }} \
-            $(echo $DIGESTS | sed 's/,/ /g' | sed 's/^/ghcr.io\/${{ env.REPO_LOWERCASE }}@/g')
+            --tag $REPO:latest \
+            --tag $REPO:prod \
+            --tag $REPO:${{ github.sha }} \
+            $DIGEST_ARGS
             
       # Cloudflare cache purging
       - name: Purge Cloudflare Cache for Specific URL
