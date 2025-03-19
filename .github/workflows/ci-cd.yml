@@ -88,13 +88,16 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           echo ${{ env.DIGEST }} > /tmp/digests/${{ env.PLATFORM_TAG }}
+          # Print file content for debugging
+          echo "Created digest file for ${{ env.PLATFORM_TAG }} with content:"
+          cat /tmp/digests/${{ env.PLATFORM_TAG }}
           
       # Upload digests as an artifact
       - name: Upload digest
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: digests
+          name: digests-${{ matrix.platform }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -126,12 +129,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
-      # Download digests
+      # Download all platform digests
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
-          name: digests
+          pattern: digests-*
           path: /tmp/digests
+          merge-multiple: true
       
       # Prepare repository name
       - name: Prepare Docker Tags
@@ -143,12 +147,17 @@ jobs:
       # Create manifest list and push
       - name: Create and Push Manifest
         run: |
+          # Debug: List all files in the digests directory
+          echo "Files in /tmp/digests/:"
+          ls -la /tmp/digests/
+          
           # Create comma-separated list of digests
           DIGESTS=""
           for digest in /tmp/digests/*; do
             PLATFORM=$(basename "$digest" | tr '-' '/')
             DIGEST_VALUE=$(cat "$digest")
             DIGESTS="${DIGESTS}${DIGESTS:+,}${PLATFORM}@${DIGEST_VALUE}"
+            echo "Processing $digest: Platform=$PLATFORM, Digest=$DIGEST_VALUE"
           done
           
           echo "Creating manifest with digests: $DIGESTS"
