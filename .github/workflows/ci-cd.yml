@@ -32,6 +32,7 @@ jobs:
 
       # Setup Node.js v20 explicitly
       - name: Setup Node.js
+        id: setup-node
         uses: actions/setup-node@v3
         with:
           node-version: '20'
@@ -51,6 +52,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}-
             ${{ runner.os }}-node-
+
+      # Output cache status with emoji
+      - name: Report npm cache status
+        run: |
+          if [[ "${{ steps.setup-node.outputs.cache-hit }}" == "true" ]]; then
+            echo "🟢 Node.js setup cache: HIT ✅"
+          else
+            echo "🔴 Node.js setup cache: MISS ❌"
+          fi
+          
+          if [[ "${{ steps.cache-node.outputs.cache-hit }}" == "true" ]]; then
+            echo "🟢 Node modules cache: HIT ✅"
+          else
+            echo "🔴 Node modules cache: MISS ❌"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -82,18 +98,36 @@ jobs:
             NPM_CONFIG_FUND=false
             NPM_CONFIG_AUDIT=false
             NEXT_WEBPACK_MEMORY_LIMIT=4096
+            NEXT_TYPESCRIPT_CHECK=true
+            NEXT_ESLINT_CHECK=true
+            PYTHON=python3
           # Don't tag the platform-specific images, only push by digest
           outputs: type=image,name=ghcr.io/${{ env.REPO_LOWERCASE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:cache-{1},mode=max', env.REPO_LOWERCASE, env.PLATFORM_TAG) || 'type=inline' }}
+          # Add buildkit options to improve ARM64 builds
+          provenance: false
+          # Set ulimits for build
+          ulimit: |
+            nofile=65536:65536
         # Save build logs for later analysis
         env:
           BUILDKIT_PROGRESS: plain
           DOCKER_BUILDKIT: 1
           BUILDKIT_STEP_LOG_MAX_SIZE: 10485760 # Increase log size to 10MB
           BUILDKIT_STEP_LOG_MAX_SPEED: 1048576 # Increase log speed
-        # tee to save logs to file
-        # Use tee command to capture logs for stats analysis
+          # Try to increase memory available for ARM builds
+          DOCKER_BUILD_MEMORY: 4g
+      
+      # Check if Docker cache was hit (by examining logs)
+      - name: Check Docker Cache Status
+        run: |
+          # Check if "cached" appears in the build log
+          if docker buildx build --progress=plain --no-cache=false . 2>&1 | grep -q "CACHED"; then
+            echo "🟢 Docker layer cache: HIT ✅"
+          else
+            echo "🔴 Docker layer cache: MISS ❌"
+          fi
       
       # Extract logs from docker build for statistics
       - name: Extract Build Logs
@@ -130,23 +164,48 @@ jobs:
       
       - name: Display Build Cache Stats
         run: |
-          echo "============= Build Performance Summary for ${{ matrix.platform }} ============="
+          echo "============= 🏗️ Build Performance Summary for ${{ matrix.platform }} ============="
           echo "Platform build duration: ${{ steps.docker_build.outputs.buildDuration || 'N/A' }}s"
           
           # Cache status with emojis
-          if [[ "${{ steps.cache-node.outputs.cache-hit }}" == "true" ]]; then
-            echo "Node modules cache: HIT ✅"
+          if [[ "${{ steps.setup-node.outputs.cache-hit }}" == "true" ]]; then
+            echo "🟢 Node.js setup cache: HIT ✅"
           else
-            echo "Node modules cache: MISS ❌"
+            echo "🔴 Node.js setup cache: MISS ❌"
           fi
           
-          # Docker layer cache status (inferred)
-          echo "Docker layer cache: Using registry cache at ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}"
+          if [[ "${{ steps.cache-node.outputs.cache-hit }}" == "true" ]]; then
+            echo "🟢 Node modules cache: HIT ✅"
+          else
+            echo "🔴 Node modules cache: MISS ❌"
+          fi
           
-          # Show build summary by stage
-          echo "Build summary:"
-          echo "  📦 Dependencies installation: $(grep -o 'RUN npm ci.*DONE [0-9.]*s' /tmp/build_logs.txt 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')"
-          echo "  🔨 Next.js build step: $(grep -o 'Creating an optimized production build.*Generating static pages' /tmp/build_logs.txt -A 1 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')"
+          # Docker layer cache status
+          if grep -q "CACHED" /tmp/build_logs.txt; then
+            echo "🟢 Docker layer cache: HIT ✅"
+          else
+            echo "🔴 Docker layer cache: MISS ❌"
+          fi
+          
+          # Show build summary by stage with emojis
+          echo "📊 Build summary:"
+          
+          # Check npm installation time
+          NPM_INSTALL_TIME=$(grep -o 'RUN npm install.*DONE [0-9.]*s' /tmp/build_logs.txt 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')
+          if [[ "$NPM_INSTALL_TIME" != "N/A" ]]; then
+            echo "  📦 Dependencies installation: $NPM_INSTALL_TIME"
+          else
+            echo "  📦 Dependencies installation: CACHED ✅"
+          fi
+          
+          # Check next.js build time
+          NEXTJS_BUILD_TIME=$(grep -o 'Creating an optimized production build.*Generating static pages' /tmp/build_logs.txt -A 1 2>/dev/null | grep -o '[0-9.]*s' || echo 'N/A')
+          if [[ "$NEXTJS_BUILD_TIME" != "N/A" ]]; then
+            echo "  🔨 Next.js build step: $NEXTJS_BUILD_TIME"
+          else
+            echo "  🔨 Next.js build step: CACHED ✅"
+          fi
+          
           echo "=============================================================="
 
   # Create a multi-platform manifest
@@ -170,11 +229,24 @@ jobs:
       
       # Download all platform digests
       - name: Download digests
+        id: download-digests
         uses: actions/download-artifact@v4
         with:
           pattern: digests-*
           path: /tmp/digests
           merge-multiple: true
+      
+      # Check if digests were successfully downloaded
+      - name: Check Digests Status
+        run: |
+          if [ -n "$(ls -A /tmp/digests 2>/dev/null)" ]; then
+            echo "🟢 Digests download: SUCCESS ✅"
+            echo "Files in /tmp/digests/:"
+            ls -la /tmp/digests/
+          else
+            echo "🔴 Digests download: FAILED ❌"
+            exit 1
+          fi
       
       # Prepare repository name
       - name: Prepare Docker Tags
@@ -185,6 +257,7 @@ jobs:
       
       # Create manifest list and push
       - name: Create and Push Manifest
+        id: create-manifest
         run: |
           # Debug: List all files in the digests directory
           echo "Files in /tmp/digests/:"
@@ -209,8 +282,19 @@ jobs:
             --tag $REPO:${{ github.sha }} \
             $MANIFEST_ARGS
             
+      # Check if manifest was successfully created
+      - name: Check Manifest Status
+        run: |
+          REPO="ghcr.io/${{ env.REPO_LOWERCASE }}"
+          if docker buildx imagetools inspect $REPO:latest > /dev/null 2>&1; then
+            echo "🟢 Manifest creation: SUCCESS ✅"
+          else
+            echo "🔴 Manifest creation: FAILED ❌"
+          fi
+            
       # Cloudflare cache purging
       - name: Purge Cloudflare Cache for Specific URL
+        id: purge-cloudflare
         run: |
           RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
@@ -220,8 +304,10 @@ jobs:
           echo "Cloudflare API Response: $RESPONSE"
           
           if echo "$RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo "🟢 Cloudflare cache purged: SUCCESS ✅"
             echo "✅ Cloudflare cache purged successfully for TBC-NFT.nikolashack.com!"
           else
+            echo "🔴 Cloudflare cache purged: FAILED ❌"
             echo "❌ Failed to purge Cloudflare cache! Check the response for details."
             exit 1
           fi
@@ -229,9 +315,22 @@ jobs:
       # Display overall build stats  
       - name: Display Overall Build Performance
         run: |
-          echo "============= Build Performance Summary ============="
+          echo "============= 🚀 Build Performance Summary ============="
           echo "Workflow ID: ${{ github.run_id }}"
-          echo "Multi-platform manifest successfully created and pushed!"
+          echo "🟢 Multi-platform manifest successfully created and pushed! ✅"
           echo "Tags: latest, prod, ${{ github.sha }}"
-          echo "Docker layer caches: Using platform-specific registry caches"
-          echo "=====================================================" 
+          
+          # Check all statuses
+          if [ -n "$(ls -A /tmp/digests 2>/dev/null)" ]; then
+            echo "🟢 Digests: SUCCESS ✅"
+          else
+            echo "🔴 Digests: FAILED ❌"
+          fi
+          
+          if docker buildx imagetools inspect ghcr.io/${{ env.REPO_LOWERCASE }}:latest > /dev/null 2>&1; then
+            echo "🟢 Manifest: SUCCESS ✅"
+          else
+            echo "🔴 Manifest: FAILED ❌"
+          fi
+          
+          echo "======================================================" 

@@ -10,13 +10,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 FROM base AS deps
 
 # Install dependencies needed for native modules
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++ py3-pip
 
 # Copy package files
 COPY package.json package-lock.json ./
 
 # Install ALL dependencies including dev dependencies
-RUN npm install
+# Use --ignore-scripts to avoid running build scripts that require native modules
+# We'll rebuild them after all deps are installed
+RUN npm install --ignore-scripts
+
+# Rebuild any native modules that need compilation
+RUN npm rebuild
 
 # Build stage
 FROM base AS builder
@@ -35,6 +40,9 @@ ENV NEXT_PUBLIC_PROJECT_ID=$NEXT_PUBLIC_PROJECT_ID
 
 # Set NODE_ENV for build
 ENV NODE_ENV=production
+# Ensure type checking and linting are enabled
+ENV NEXT_TYPESCRIPT_CHECK=true
+ENV NEXT_ESLINT_CHECK=true
 
 # Build the application
 RUN npm run build

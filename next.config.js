@@ -13,18 +13,15 @@ const nextConfig = {
   compiler: {
     // Disable React server components features we don't use for smaller builds
     removeConsole: process.env.NODE_ENV === 'production',
-    // minify removed as it's no longer supported in Next.js 15
   },
-  // Only build the pages we actually need
+  // Type checking during build
   typescript: {
-    // Speed up build by not doing type checking during build
-    // (we do it separately)
-    ignoreBuildErrors: true,
+    // Enable type checking during build
+    ignoreBuildErrors: false,
   },
   eslint: {
-    // Speed up build by not doing linting during build
-    // (we do it separately)
-    ignoreDuringBuilds: true,
+    // Enable linting during build
+    ignoreDuringBuilds: false,
   },
   // Cache aggressively
   output: 'standalone',
