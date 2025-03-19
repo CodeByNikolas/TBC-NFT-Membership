@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true, // Use SWC for minification (faster than Terser)
+  // swcMinify has moved to compiler options in Next.js 15
   webpack: config => {
     config.externals.push('pino-pretty', 'lokijs', 'encoding')
     return config
@@ -9,16 +9,13 @@ const nextConfig = {
   experimental: {
     // Enable memory optimizations
     optimizeCss: true,
-    // Reduce memory usage and build time
-    turbotrace: {
-      memoryLimit: process.env.NEXT_WEBPACK_MEMORY_LIMIT 
-        ? parseInt(process.env.NEXT_WEBPACK_MEMORY_LIMIT) 
-        : 4096,
-    },
+    // turbotrace removed as it's no longer supported in Next.js 15
   },
   compiler: {
     // Disable React server components features we don't use for smaller builds
     removeConsole: process.env.NODE_ENV === 'production',
+    // SWC minify moved here from root config
+    minify: true,
   },
   // Only build the pages we actually need
   typescript: {
