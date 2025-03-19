@@ -64,17 +64,36 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
-          tags: |
-            ghcr.io/${{ env.REPO_LOWERCASE }}:${{ env.PLATFORM_TAG }}
+          # Don't tag the platform-specific images, only push by digest
+          outputs: type=image,name=ghcr.io/${{ env.REPO_LOWERCASE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache-${{ env.PLATFORM_TAG }}
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:cache-{1},mode=max', env.REPO_LOWERCASE, env.PLATFORM_TAG) || 'type=inline' }}
-          outputs: type=image,name=ghcr.io/${{ env.REPO_LOWERCASE }}:${{ env.PLATFORM_TAG }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-      
+        
       # Save digests for later use in the manifest job
       - name: Output Digest
         id: digest
         run: |
-          echo "DIGEST=${{ steps.docker_build.outputs.digest }}" >> $GITHUB_OUTPUT
+          digest="${{ steps.docker_build.outputs.digest }}"
+          echo "digest=${digest}" >> $GITHUB_OUTPUT
+          echo "DIGEST=${digest}" >> $GITHUB_ENV
+          
+      # Export the digest to GitHub output
+      - name: Export digest for ${{ matrix.platform }}
+        if: github.event_name != 'pull_request'
+        # Use platform tag as output name and store digest
+        run: |
+          mkdir -p /tmp/digests
+          echo ${{ env.DIGEST }} > /tmp/digests/${{ env.PLATFORM_TAG }}
+          
+      # Upload digests as an artifact
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v3
+        with:
+          name: digests
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
       
       - name: Display Build Cache Stats
         run: |
@@ -99,11 +118,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
       
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        
+      # Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+      
+      # Download digests
+      - name: Download digests
+        uses: actions/download-artifact@v3
+        with:
+          name: digests
+          path: /tmp/digests
       
       # Prepare repository name
       - name: Prepare Docker Tags
@@ -112,18 +136,25 @@ jobs:
           REPO_LOWERCASE="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
           echo "REPO_LOWERCASE=$REPO_LOWERCASE" >> $GITHUB_ENV
       
-      # Create and push a multi-platform manifest
+      # Create manifest list and push
       - name: Create and Push Manifest
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            NEXT_PUBLIC_PROJECT_ID=${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
-          tags: |
-            ghcr.io/${{ env.REPO_LOWERCASE }}:latest
-            ghcr.io/${{ env.REPO_LOWERCASE }}:${{ github.sha }}
+        run: |
+          # Create comma-separated list of digests
+          DIGESTS=""
+          for digest in /tmp/digests/*; do
+            PLATFORM=$(basename "$digest" | tr '-' '/')
+            DIGEST_VALUE=$(cat "$digest")
+            DIGESTS="${DIGESTS}${DIGESTS:+,}${PLATFORM}@${DIGEST_VALUE}"
+          done
+          
+          echo "Creating manifest with digests: $DIGESTS"
+          
+          # Use Docker manifest command to create the multi-platform image
+          docker buildx imagetools create \
+            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:latest \
+            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:prod \
+            --tag ghcr.io/${{ env.REPO_LOWERCASE }}:${{ github.sha }} \
+            $(echo $DIGESTS | sed 's/,/ /g' | sed 's/^/ghcr.io\/${{ env.REPO_LOWERCASE }}@/g')
             
       # Cloudflare cache purging
       - name: Purge Cloudflare Cache for Specific URL
@@ -148,6 +179,6 @@ jobs:
           echo "============= Build Performance Summary ============="
           echo "Workflow ID: ${{ github.run_id }}"
           echo "Multi-platform manifest successfully created and pushed!"
-          echo "Tags: latest, ${{ github.sha }}"
+          echo "Tags: latest, prod, ${{ github.sha }}"
           echo "Docker layer caches: Using platform-specific registry caches"
           echo "=====================================================" 
