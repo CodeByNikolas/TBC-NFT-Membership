@@ -294,22 +294,21 @@ jobs:
             echo "🔴 Manifest creation: FAILED ❌"
           fi
             
-      # Cloudflare cache purging
-      - name: Purge Cloudflare Cache for Specific URL
-        id: purge-cloudflare
+      - name: Purge Cloudflare Cache
         run: |
+          # Store the response in a variable
           RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            --data '{"hosts":["TBC-NFT.nikolashack.com"]}')
+            --data '{"purge_everything":true}')
           
+          # Print the response
           echo "Cloudflare API Response: $RESPONSE"
           
+          # Check if the response contains 'success": true' (with any whitespace between : and true)
           if echo "$RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
-            echo "🟢 Cloudflare cache purged: SUCCESS ✅"
-            echo "✅ Cloudflare cache purged successfully for TBC-NFT.nikolashack.com!"
+            echo "✅ Cloudflare cache purged successfully!"
           else
-            echo "🔴 Cloudflare cache purged: FAILED ❌"
             echo "❌ Failed to purge Cloudflare cache! Check the response for details."
             exit 1
           fi
