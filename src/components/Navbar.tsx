@@ -29,8 +29,8 @@ export default function Navbar() {
                 <Link href="/" className={`inline-flex items-center px-1 pt-1 text-gray-700 hover:text-gray-900 ${isActive('/')}`}>
                   Home
                 </Link>
-                <Link href="/contact-creation" className={`inline-flex items-center px-1 pt-1 text-gray-700 hover:text-gray-900 ${isActive('/contact-creation')}`}>
-                  Contact Creation
+                <Link href="/contract-creation" className={`inline-flex items-center px-1 pt-1 text-gray-700 hover:text-gray-900 ${isActive('/contract-creation')}`}>
+                  Contract Creation
                 </Link>
                 <Link href="/nft-editing" className={`inline-flex items-center px-1 pt-1 text-gray-700 hover:text-gray-900 ${isActive('/nft-editing')}`}>
                   NFT Editing
@@ -108,8 +108,8 @@ export default function Navbar() {
             <Link href="/" className={`block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${isActive('/')}`}>
               Home
             </Link>
-            <Link href="/contact-creation" className={`block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${isActive('/contact-creation')}`}>
-              Contact Creation
+            <Link href="/contract-creation" className={`block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${isActive('/contract-creation')}`}>
+              Contract Creation
             </Link>
             <Link href="/nft-editing" className={`block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${isActive('/nft-editing')}`}>
               NFT Editing

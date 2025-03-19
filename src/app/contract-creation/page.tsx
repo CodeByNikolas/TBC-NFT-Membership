@@ -1,10 +1,10 @@
 'use client';
 
-export default function ContactCreation() {
+export default function ContractCreation() {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-3xl mx-auto text-center">
-        <h1 className="text-3xl font-bold mb-8">Contact Creation</h1>
+        <h1 className="text-3xl font-bold mb-8">Contract Creation</h1>
         
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-md shadow-md">
           <div className="flex items-center mb-4">
