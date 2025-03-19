@@ -263,24 +263,26 @@ jobs:
           echo "Files in /tmp/digests/:"
           ls -la /tmp/digests/
           
-          # Create properly formatted manifest args
-          MANIFEST_ARGS=""
+          # Create a list of digest arguments for the manifest
+          DIGESTS=""
           for digest_file in /tmp/digests/*; do
             PLATFORM=$(basename "$digest_file" | tr '-' '/')
             DIGEST_VALUE=$(cat "$digest_file")
             echo "Processing $digest_file: Platform=$PLATFORM, Digest=$DIGEST_VALUE"
-            MANIFEST_ARGS="$MANIFEST_ARGS --amend $DIGEST_VALUE"
+            DIGESTS="$DIGESTS $DIGEST_VALUE"
           done
           
-          echo "Creating manifest with args: $MANIFEST_ARGS"
+          echo "Creating manifest with digests: $DIGESTS"
           
           # Use Docker manifest command to create the multi-platform image
           REPO="ghcr.io/${{ env.REPO_LOWERCASE }}"
+          
+          # Correct syntax for buildx imagetools create
           docker buildx imagetools create \
             --tag $REPO:latest \
             --tag $REPO:prod \
             --tag $REPO:${{ github.sha }} \
-            $MANIFEST_ARGS
+            $DIGESTS
             
       # Check if manifest was successfully created
       - name: Check Manifest Status

@@ -31,9 +31,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Ensure critters is installed for optimizeCss
-RUN npm install critters --save-dev
-
 # Inject build-time env variables
 ARG NEXT_PUBLIC_PROJECT_ID
 ENV NEXT_PUBLIC_PROJECT_ID=$NEXT_PUBLIC_PROJECT_ID

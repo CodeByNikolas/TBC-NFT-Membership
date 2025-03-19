@@ -6,10 +6,6 @@ const nextConfig = {
     config.externals.push('pino-pretty', 'lokijs', 'encoding')
     return config
   },
-  experimental: {
-    // Enable memory optimizations
-    optimizeCss: true,
-  },
   compiler: {
     // Disable React server components features we don't use for smaller builds
     removeConsole: process.env.NODE_ENV === 'production',
