@@ -296,46 +296,23 @@ jobs:
             
       - name: Purge Cloudflare Cache
         run: |
-          echo "🔄 Starting Cloudflare Cache Purge Operations..."
+          # Store the response in a variable
+          RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
           
-          # Purge entire zone
-          echo "🌐 Purging entire zone cache..."
-          ZONE_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
-              -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              --data '{"purge_everything":true}')
+          # Print the response
+          echo "Cloudflare API Response: $RESPONSE"
           
-          if echo "$ZONE_RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
-            echo "✅ Zone cache purge: SUCCESS"
+          # Check if the response contains 'success": true' (with any whitespace between : and true)
+          if echo "$RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo "✅ Cloudflare cache purged successfully!"
           else
-            echo "❌ Zone cache purge: FAILED"
-            echo "📝 Error Response: $ZONE_RESPONSE"
-          fi
-          
-          # Purge specific domain
-          echo -e "\n🔍 Purging specific domain cache..."
-          DOMAIN_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
-              -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              --data "{\"files\":[\"https://${{ secrets.CF_DOMAIN }}\"]}")
-          
-          if echo "$DOMAIN_RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
-            echo "✅ Domain cache purge: SUCCESS"
-          else
-            echo "❌ Domain cache purge: FAILED"
-            echo "📝 Error Response: $DOMAIN_RESPONSE"
-          fi
-          
-          # Overall status
-          echo -e "\n============= 🧹 Cache Purge Summary ============="
-          if echo "$ZONE_RESPONSE $DOMAIN_RESPONSE" | grep -q '"success"[[:space:]]*:[[:space:]]*false'; then
-            echo "❌ Overall Status: Some operations failed"
+            echo "❌ Failed to purge Cloudflare cache! Check the response for details."
             exit 1
-          else
-            echo "✅ Overall Status: All cache purge operations completed successfully!"
           fi
-          echo "=============================================="
-
+          
       # Display overall build stats  
       - name: Display Overall Build Performance
         run: |
