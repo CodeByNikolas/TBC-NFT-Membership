@@ -2,6 +2,9 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 # Copy package files first to leverage layer caching
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -22,6 +25,9 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine
 WORKDIR /app
+
+# Install Python and build tools needed for native modules in production
+RUN apk add --no-cache python3 make g++
 
 # Copy package files and install production dependencies
 COPY package.json package-lock.json ./
