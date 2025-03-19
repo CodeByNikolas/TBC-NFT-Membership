@@ -8,8 +8,8 @@ import { SettingsProvider } from '../context/SettingsContext'
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Wallet Connection Demo",
-  description: "Connect your wallet and switch between networks",
+  title: "TBC-NFT",
+  description: "NFT platform to manage Club Membership NFTs",
 };
 
 export default function RootLayout({

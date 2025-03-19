@@ -1,9 +1,10 @@
-# Wallet Connection Demo
+# TBC-NFT: Tum Blockchain Club Membership NFTs
 
-A simple Next.js application demonstrating wallet connection and network switching functionality using WalletConnect's AppKit.
+A Next.js application for managing and distributing membership NFTs for Tum Blockchain Club members. Each member gets their own unique NFT representing their membership in the club.
 
 ## Features
 
+- Mint and manage membership NFTs
 - Connect crypto wallets using WalletConnect's AppKit
 - Support for multiple EVM chains: Ethereum, Arbitrum, Optimism, Polygon
 - Network switching capability
