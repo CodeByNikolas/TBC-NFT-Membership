@@ -1,7 +1,7 @@
 'use client'
 
 import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData } from 'wagmi'
-import { parseEther, formatUnits } from 'viem'
+import { parseEther, formatUnits, encodeAbiParameters } from 'viem'
 import contractData from '@/contracts/TBCNFT.json'
 import axios from 'axios'
 import React from 'react'
@@ -11,13 +11,34 @@ interface DeployContractResult {
   hash: string
 }
 
+interface ContractDeploymentHook {
+  deploy: (params: {
+    name: string;
+    symbol: string;
+    baseURI?: string;
+    gasMultiplier?: number;
+  }) => Promise<DeployContractResult>;
+  estimateGas: (params: {
+    name: string;
+    symbol: string;
+    baseURI?: string;
+  }) => Promise<bigint | null>;
+  isDeploying: boolean;
+  isEstimatingGas: boolean;
+  isConfirming: boolean;
+  isSuccess: boolean;
+  hash: `0x${string}` | undefined;
+  feeData: any; // Using any here for simplicity, could be more specific
+  estimatedGas: bigint | null;
+}
+
 interface TransactionReceipt {
   contractAddress: string
   transactionHash: string
   [key: string]: any
 }
 
-export function useContractDeployment() {
+export function useContractDeployment(): ContractDeploymentHook {
   const { address } = useAccount()
   const chainId = useChainId()
   const { data: feeData } = useFeeData()
@@ -32,6 +53,18 @@ export function useContractDeployment() {
   const [manuallyConfirmed, setManuallyConfirmed] = React.useState(false)
   const [contractAddress, setContractAddress] = React.useState<string | null>(null)
   const [recordedInSupabase, setRecordedInSupabase] = React.useState(false)
+  
+  // Store estimated gas value
+  const [estimatedGas, setEstimatedGas] = React.useState<bigint | null>(null)
+  const [isEstimatingGas, setIsEstimatingGas] = React.useState(false)
+  const [lastEstimateParams, setLastEstimateParams] = React.useState<string | null>(null)
+  const estimationTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  
+  // Use this reference to track the latest estimation request to avoid race conditions
+  const latestEstimationId = React.useRef<number>(0)
+  
+  // Cache for recent estimations to avoid unnecessary API calls
+  const recentEstimations = React.useRef<Record<string, {time: number, value: bigint}>>({})
 
   // Store form values for later use in the useEffect
   const [deploymentData, setDeploymentData] = React.useState<{
@@ -39,6 +72,125 @@ export function useContractDeployment() {
     symbol: string;
     baseURI: string;
   } | null>(null)
+
+  // Function to estimate gas for contract deployment
+  const estimateContractGas = async (name: string, symbol: string, initialOwner: `0x${string}`, baseURI: string) => {
+    try {
+      console.log('Estimating gas for contract deployment with real parameters...');
+      
+      // Validate the bytecode
+      if (!contractData.bytecode || typeof contractData.bytecode !== 'string' || !contractData.bytecode.startsWith('0x')) {
+        console.error('Invalid bytecode format:', contractData.bytecode);
+        throw new Error('Invalid contract bytecode format');
+      }
+      
+      // For actual gas estimation, you would use wagmi's estimateGas directly
+      // Here we're making an RPC call to estimate gas
+      const rpcUrl = getRpcUrl(chainId);
+      if (!rpcUrl) {
+        throw new Error('No RPC URL available for this network');
+      }
+      
+      // Prepare the data for the contract deployment
+      const encodedConstructorArgs = encodeAbiParameters(
+        [
+          { name: 'name', type: 'string' },
+          { name: 'symbol', type: 'string' },
+          { name: 'initialOwner', type: 'address' },
+          { name: 'baseURI', type: 'string' }
+        ],
+        [name, symbol, initialOwner, baseURI]
+      );
+      
+      // Ensure the bytecode has the correct format with 0x prefix
+      let rawBytecode = contractData.bytecode;
+      if (typeof rawBytecode !== 'string') {
+        throw new Error('Invalid bytecode format: not a string');
+      }
+      
+      if (!rawBytecode.startsWith('0x')) {
+        rawBytecode = `0x${rawBytecode}`;
+      }
+      
+      // Now we can safely type it as a 0x-prefixed string
+      const bytecode = rawBytecode as `0x${string}`;
+      const deployData = `${bytecode}${encodedConstructorArgs.slice(2)}` as `0x${string}`;
+      
+      // Estimate gas through RPC with timeout protection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      try {
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_estimateGas',
+            params: [{
+              from: initialOwner,
+              data: deployData
+            }]
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Handle rate limiting errors explicitly
+        if (response.status === 429) {
+          console.log('Rate limit hit, using fallback gas estimate');
+          throw new Error('Rate limit exceeded');
+        }
+        
+        if (!response.ok) {
+          throw new Error(`RPC error: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(`Gas estimation failed: ${result.error.message}`);
+        }
+        
+        const estimatedGasHex = result.result;
+        if (!estimatedGasHex) {
+          throw new Error('No gas estimate returned from RPC');
+        }
+        
+        const estimateResult = BigInt(estimatedGasHex);
+        
+        console.log('Raw gas estimate result:', estimateResult);
+        
+        // Add a 20% buffer to the estimate for safety
+        const estimatedWithBuffer = estimateResult + (estimateResult * BigInt(20) / BigInt(100));
+        
+        console.log(`Final gas estimate: ${estimatedWithBuffer} (with 20% buffer)`);
+        return estimatedWithBuffer;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        throw fetchError; // Pass along the error for the main catch block
+      }
+    } catch (error) {
+      console.error('Error estimating gas:', error);
+      
+      // Fallback to conservative values if estimation fails
+      console.log('Using fallback gas estimates since real estimation failed');
+      let fallbackEstimate: bigint;
+      
+      if (chainId === 137 || chainId === 80002) {
+        // Polygon networks typically use less gas
+        fallbackEstimate = BigInt(375000); // 250000 + 50% buffer
+      } else {
+        // Ethereum and other chains
+        fallbackEstimate = BigInt(450000); // 300000 + 50% buffer
+      }
+      
+      console.log(`Using fallback gas estimate: ${fallbackEstimate}`);
+      return fallbackEstimate;
+    }
+  };
 
   // Manual polling for transaction confirmation if useWaitForTransactionReceipt doesn't work
   React.useEffect(() => {
@@ -152,6 +304,117 @@ export function useContractDeployment() {
     recordDeployment()
   }, [isSuccess, receipt, address, hash, chainId, deploymentData, manuallyConfirmed, contractAddress, recordedInSupabase])
 
+  // Function to estimate gas without deploying
+  const estimateGas = async ({
+    name,
+    symbol,
+    baseURI = 'ipfs://'
+  }: {
+    name: string
+    symbol: string
+    baseURI?: string
+  }) => {
+    if (!address) return null
+    
+    // Create a unique key for these parameters to avoid duplicate estimations
+    const paramsKey = JSON.stringify({ name, symbol, baseURI })
+    
+    // Check if we have a recent cached estimation (less than 60 seconds old)
+    const cachedEstimation = recentEstimations.current[paramsKey]
+    const now = Date.now()
+    if (cachedEstimation && (now - cachedEstimation.time < 60000)) {
+      console.log('Using cached gas estimation')
+      if (estimatedGas !== cachedEstimation.value) {
+        setEstimatedGas(cachedEstimation.value)
+      }
+      return cachedEstimation.value
+    }
+    
+    // If we already estimated gas for these exact parameters, don't re-estimate
+    if (paramsKey === lastEstimateParams && estimatedGas) {
+      return estimatedGas
+    }
+    
+    // Clear any pending timeout
+    if (estimationTimeoutRef.current) {
+      clearTimeout(estimationTimeoutRef.current)
+    }
+    
+    // Set state to indicate estimation in progress
+    setIsEstimatingGas(true)
+    
+    // Generate a unique ID for this specific estimation request
+    const currentEstimationId = ++latestEstimationId.current
+    
+    // Debounce the estimation to prevent too many API calls
+    return new Promise<bigint | null>((resolve) => {
+      estimationTimeoutRef.current = setTimeout(async () => {
+        try {
+          // Check if this estimation is still the latest one
+          if (currentEstimationId !== latestEstimationId.current) {
+            console.log('Skipping outdated estimation request', currentEstimationId, latestEstimationId.current)
+            setIsEstimatingGas(false)
+            resolve(null)
+            return
+          }
+          
+          // Validate the bytecode before estimation
+          if (!contractData.bytecode || typeof contractData.bytecode !== 'string' || !contractData.bytecode.startsWith('0x')) {
+            console.error('Invalid bytecode format:', contractData.bytecode)
+            throw new Error('Invalid contract bytecode format')
+          }
+          
+          // Store the params we're estimating for
+          setLastEstimateParams(paramsKey)
+          
+          const gasEstimate = await estimateContractGas(name, symbol, address as `0x${string}`, baseURI)
+          
+          // Cache the result
+          recentEstimations.current[paramsKey] = {
+            time: Date.now(),
+            value: gasEstimate
+          }
+          
+          // Verify this is still the most recent estimation before updating state
+          if (currentEstimationId === latestEstimationId.current) {
+            setEstimatedGas(gasEstimate)
+            setIsEstimatingGas(false)
+            resolve(gasEstimate)
+          } else {
+            // This estimation was superseded by a newer one
+            console.log('Discarding results from outdated estimation')
+            resolve(null)
+          }
+        } catch (error) {
+          console.error('Error estimating gas:', error)
+          
+          // Only use fallback if this is still the latest request
+          if (currentEstimationId === latestEstimationId.current) {
+            // Fallback to a conservative estimate
+            let fallbackEstimate: bigint;
+            if (chainId === 137 || chainId === 80002) {
+              fallbackEstimate = BigInt(375000); // Polygon networks
+            } else {
+              fallbackEstimate = BigInt(450000); // Ethereum and others
+            }
+            
+            // Cache the fallback result too
+            recentEstimations.current[paramsKey] = {
+              time: Date.now(),
+              value: fallbackEstimate
+            }
+            
+            setEstimatedGas(fallbackEstimate)
+            setIsEstimatingGas(false)
+            resolve(fallbackEstimate)
+          } else {
+            resolve(null)
+          }
+        }
+      }, 800) // 800ms debounce
+    })
+  }
+
   const deploy = async ({
     name,
     symbol,
@@ -186,22 +449,57 @@ export function useContractDeployment() {
         console.error('Invalid bytecode format:', contractData.bytecode)
         throw new Error('Invalid contract bytecode format')
       }
+      
+      // Estimate gas for this specific deployment
+      const gasEstimate = await estimateGas({ name, symbol, baseURI });
+      setEstimatedGas(gasEstimate);
 
       try {
         // Deploy contract with more precise types
-        console.log('Calling deployContract...')
+        console.log('Calling deployContract...');
+        console.log('Using gas multiplier:', gasMultiplier);
+        
+        // Calculate gas price with a more significant reduction for slow option
+        let adjustedMaxFeePerGas = feeData.maxFeePerGas;
+        let adjustedMaxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+        
+        if (gasMultiplier <= 0.5) {
+          // For very slow option, apply an extra 50% reduction
+          adjustedMaxFeePerGas = BigInt(Math.floor(Number(feeData.maxFeePerGas) * 0.5));
+          if (feeData.maxPriorityFeePerGas) {
+            adjustedMaxPriorityFeePerGas = BigInt(Math.floor(Number(feeData.maxPriorityFeePerGas) * 0.5));
+          }
+          console.log('Applied aggressive gas reduction for very slow option');
+        } else {
+          // Normal multiplier application
+          adjustedMaxFeePerGas = BigInt(Math.floor(Number(feeData.maxFeePerGas) * gasMultiplier));
+          if (feeData.maxPriorityFeePerGas) {
+            adjustedMaxPriorityFeePerGas = BigInt(Math.floor(Number(feeData.maxPriorityFeePerGas) * gasMultiplier));
+          }
+        }
+        
+        console.log('Original gas price (gwei):', formatUnits(feeData.maxFeePerGas, 9));
+        console.log('Adjusted gas price (gwei):', formatUnits(adjustedMaxFeePerGas, 9));
+        
+        // Ensure we have a valid gas limit, falling back to network defaults if needed
+        const finalGasLimit = gasEstimate || (
+          chainId === 137 || chainId === 80002 
+            ? BigInt(375000)  // Polygon networks 
+            : BigInt(450000)  // Ethereum and others
+        );
+        
+        console.log(`Using estimated gas limit: ${finalGasLimit}`);
+        
         const result = await deployContract({
           abi: contractData.abi,
           bytecode: contractData.bytecode as `0x${string}`,
           args: [name, symbol, address, baseURI],
-          // Let the wallet estimate gas automatically, but still set the fee multiplier
-          maxFeePerGas: feeData.maxFeePerGas 
-            ? BigInt(Math.floor(Number(feeData.maxFeePerGas) * gasMultiplier))
-            : undefined,
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas 
-            ? BigInt(Math.floor(Number(feeData.maxPriorityFeePerGas) * gasMultiplier))
-            : undefined,
-        })
+          // Use more conservative gas estimations for Polygon networks
+          maxFeePerGas: adjustedMaxFeePerGas,
+          maxPriorityFeePerGas: adjustedMaxPriorityFeePerGas,
+          // Use the estimated gas value with a safety buffer
+          gas: finalGasLimit
+        });
         
         console.log('deployContract returned:', result)
         
@@ -231,12 +529,15 @@ export function useContractDeployment() {
 
   return {
     deploy,
+    estimateGas,
     isDeploying: isPending,
+    isEstimatingGas,
     isConfirming: isConfirming && !manuallyConfirmed,
     isSuccess: isSuccess || manuallyConfirmed,
     hash,
     feeData,
-  }
+    estimatedGas
+  };
 }
 
 // Helper function to get RPC URL for the current chain
@@ -255,17 +556,17 @@ function getRpcUrl(chainId: number): string | null {
   }
 }
 
-function getNetworkName(chainId: number) {
+function getNetworkName(chainId: number): string {
   switch (chainId) {
     case 1:
-      return 'Ethereum Mainnet'
+      return 'Ethereum Mainnet';
     case 11155111:
-      return 'Sepolia Testnet'
+      return 'Sepolia Testnet';
     case 137:
-      return 'Polygon Mainnet'
+      return 'Polygon Mainnet';
     case 80002:
-      return 'Polygon Amoy'
+      return 'Polygon Amoy';
     default:
-      return 'Unknown Network'
+      return 'Unknown Network';
   }
 }

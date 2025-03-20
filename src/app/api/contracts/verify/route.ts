@@ -1,90 +1,42 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
 import { verificationService } from '@/lib/verification';
+import { supabaseAdmin } from '@/lib/supabase';
 
-// POST endpoint to trigger verification for a specific contract
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { contract_address } = body;
-    
-    console.log(`Verification requested for contract: ${contract_address}`);
+    const { contract_address } = await request.json();
     
     if (!contract_address) {
-      console.error('Missing contract address in verification request');
-      return NextResponse.json(
-        { error: 'Contract address is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Contract address is required' }, { status: 400 });
     }
     
-    // Find the contract in Supabase
-    const { data: contract, error } = await supabaseAdmin
+    // Find the deployment by contract address
+    const { data: deployment, error } = await supabaseAdmin
       .from('contract_deployments')
       .select('*')
       .eq('contract_address', contract_address)
       .single();
     
-    if (error) {
-      console.error(`Contract not found: ${contract_address}`, error);
-      return NextResponse.json(
-        { error: 'Contract not found' },
-        { status: 404 }
-      );
+    if (error || !deployment) {
+      console.error('Error finding deployment:', error);
+      return NextResponse.json({ error: 'Deployment not found' }, { status: 404 });
     }
     
-    console.log(`Contract found for verification:`, {
-      id: contract.id,
-      address: contract.contract_address,
-      network: contract.network,
-      current_status: contract.verification_status
+    console.log(`Manual verification requested for ${contract_address}`);
+    
+    // Use the verifyDeploymentById method which has bypass_delay flag
+    await verificationService.verifyDeploymentById(deployment.id);
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Verification started',
+      contract_address,
+      deployment_id: deployment.id
     });
-    
-    // Check if the contract is already verified or has a verification in progress
-    if (contract.verification_status !== 'pending' && contract.verification_status !== 'failed') {
-      console.log(`Contract ${contract_address} verification status is already: ${contract.verification_status}`);
-      return NextResponse.json({
-        message: `Contract verification is ${contract.verification_status}`,
-        status: contract.verification_status
-      });
-    }
-    
-    console.log(`Starting verification process for contract: ${contract_address} on ${contract.network}`);
-    
-    // Manually verify this specific contract
-    try {
-      await verificationService.verifyContract(contract);
-      console.log(`Verification process initiated for contract: ${contract_address}`);
-      
-      return NextResponse.json({
-        message: 'Contract verification initiated',
-        contract_address
-      });
-    } catch (verificationError) {
-      console.error(`Error during verification process:`, verificationError);
-      
-      // Update the contract status to failed even if the verification process throws an error
-      try {
-        await supabaseAdmin
-          .from('contract_deployments')
-          .update({
-            verification_status: 'failed',
-            verification_message: verificationError instanceof Error 
-              ? verificationError.message 
-              : 'Unknown error during verification',
-            verification_timestamp: new Date().toISOString()
-          })
-          .eq('id', contract.id);
-      } catch (updateError) {
-        console.error('Failed to update contract status after verification error:', updateError);
-      }
-      
-      throw verificationError;
-    }
   } catch (error: any) {
-    console.error('Error triggering contract verification:', error);
+    console.error('Error starting verification:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || 'An error occurred' },
       { status: 500 }
     );
   }
@@ -117,12 +69,37 @@ export async function GET(request: Request) {
       );
     }
     
+    // Determine explorer URL based on network
+    let explorerUrl = '';
+    switch(contract.network.toLowerCase()) {
+      case 'ethereum mainnet':
+        explorerUrl = `https://etherscan.io/address/${contract_address}`;
+        break;
+      case 'sepolia testnet':
+        explorerUrl = `https://sepolia.etherscan.io/address/${contract_address}`;
+        break;
+      case 'polygon mainnet':
+        explorerUrl = `https://polygonscan.com/address/${contract_address}`;
+        break;
+      case 'polygon amoy':
+        explorerUrl = `https://amoy.polygonscan.com/address/${contract_address}`;
+        break;
+      default:
+        // Fallback based on chain ID
+        if (contract.chain_id === 1) explorerUrl = `https://etherscan.io/address/${contract_address}`;
+        else if (contract.chain_id === 11155111) explorerUrl = `https://sepolia.etherscan.io/address/${contract_address}`;
+        else if (contract.chain_id === 137) explorerUrl = `https://polygonscan.com/address/${contract_address}`;
+        else if (contract.chain_id === 80002) explorerUrl = `https://amoy.polygonscan.com/address/${contract_address}`;
+        else explorerUrl = `https://etherscan.io/address/${contract_address}`;
+    }
+    
     // Return the verification status
     return NextResponse.json({
       contract_address,
       verification_status: contract.verification_status,
       verification_message: contract.verification_message,
-      verification_timestamp: contract.verification_timestamp
+      verification_timestamp: contract.verification_timestamp,
+      explorer_url: explorerUrl
     });
   } catch (error: any) {
     console.error('Error checking verification status:', error);

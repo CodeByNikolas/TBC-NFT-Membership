@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, FormEvent, ChangeEvent, useMemo } from 'react'
+import { useState, FormEvent, ChangeEvent, useMemo, useEffect } from 'react'
 import { useContractDeployment } from '@/hooks/useContractDeployment'
 import { useChainId, useAccount } from 'wagmi'
 import { Button } from '@/components/ui/button'
@@ -23,13 +23,13 @@ interface FormData {
 export function ContractDeploymentForm() {
   const { address } = useAccount()
   const chainId = useChainId()
-  const { deploy, isDeploying, isConfirming, isSuccess, hash, feeData } = useContractDeployment()
+  const { deploy, estimateGas, isDeploying, isEstimatingGas, isConfirming, isSuccess, hash, feeData, estimatedGas } = useContractDeployment()
 
   const [formData, setFormData] = useState<FormData>({
     name: 'TBC Membership NFT',
     symbol: 'TBC',
     baseURI: 'ipfs://',
-    gasMultiplier: 0.8,
+    gasMultiplier: 1.0, // Use 1.0 (normal) for standard transaction speed
   })
 
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +38,7 @@ export function ContractDeploymentForm() {
   const [txHash, setTxHash] = useState<string | null>(null)
 
   // Check if gas data is still loading
-  React.useEffect(() => {
+  useEffect(() => {
     if (feeData?.maxFeePerGas) {
       setIsGasLoading(false)
     } else {
@@ -46,8 +46,31 @@ export function ContractDeploymentForm() {
     }
   }, [feeData])
 
+  // Estimate gas whenever form data changes
+  useEffect(() => {
+    let isMounted = true;
+    const debouncedEstimation = setTimeout(async () => {
+      if (address && feeData?.maxFeePerGas && isMounted) {
+        try {
+          await estimateGas({
+            name: formData.name,
+            symbol: formData.symbol,
+            baseURI: formData.baseURI
+          });
+        } catch (err) {
+          console.error('Failed to estimate gas:', err);
+        }
+      }
+    }, 1000); // Add a longer debounce time to prevent rapid re-estimation
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(debouncedEstimation);
+    };
+  }, [address, feeData, formData.name, formData.symbol, formData.baseURI, estimateGas]);
+
   // Track transaction hash changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (hash && !txHash) {
       setTxHash(hash)
       setTxInProgress(true)
@@ -113,21 +136,35 @@ export function ContractDeploymentForm() {
 
   const estimatedGasCost = useMemo(() => {
     if (!feeData?.maxFeePerGas) return null
-    // Use a more conservative estimate - 500K gas units instead of 1M
-    const baseGas = BigInt(500000)
+    
+    // Use the dynamic estimation if available, otherwise fallback to static
+    const baseGas = estimatedGas || BigInt(300000)
     const gasPrice = feeData.maxFeePerGas
-    const cost = baseGas * gasPrice
-    return formatUnits(cost * BigInt(Math.floor(formData.gasMultiplier * 100)) / BigInt(100), 9)
-  }, [feeData, formData.gasMultiplier])
+    
+    // Apply the same aggressive reduction for very slow option
+    const adjustedGasPrice = formData.gasMultiplier <= 0.5
+      ? gasPrice * BigInt(50) / BigInt(100)  // 50% reduction
+      : gasPrice * BigInt(Math.floor(formData.gasMultiplier * 100)) / BigInt(100)
+    
+    const cost = baseGas * adjustedGasPrice
+    return formatUnits(cost, 9)
+  }, [feeData, formData.gasMultiplier, estimatedGas])
 
   const estimatedGasCostInNative = useMemo(() => {
     if (!feeData?.maxFeePerGas) return null
-    // Use a more conservative estimate - 500K gas units instead of 1M
-    const baseGas = BigInt(500000)
+    
+    // Use the dynamic estimation if available, otherwise fallback to static
+    const baseGas = estimatedGas || BigInt(300000)
     const gasPrice = feeData.maxFeePerGas
-    const cost = baseGas * gasPrice
-    return formatUnits(cost * BigInt(Math.floor(formData.gasMultiplier * 100)) / BigInt(100), 18)
-  }, [feeData, formData.gasMultiplier])
+    
+    // Apply the same aggressive reduction for very slow option
+    const adjustedGasPrice = formData.gasMultiplier <= 0.5
+      ? gasPrice * BigInt(50) / BigInt(100)  // 50% reduction
+      : gasPrice * BigInt(Math.floor(formData.gasMultiplier * 100)) / BigInt(100)
+    
+    const cost = baseGas * adjustedGasPrice
+    return formatUnits(cost, 18)
+  }, [feeData, formData.gasMultiplier, estimatedGas])
 
   const currentGasPrice = useMemo(() => {
     if (!feeData?.maxFeePerGas) return null
@@ -274,6 +311,12 @@ export function ContractDeploymentForm() {
             <span>Cheaper</span>
             <span>Faster</span>
           </div>
+          {isEstimatingGas && (
+            <div className="text-sm flex items-center text-gray-500 mt-2">
+              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+              Estimating gas...
+            </div>
+          )}
           {currentGasPrice && (
             <div className="space-y-1 mt-2">
               <p className="text-base text-gray-500">
@@ -282,6 +325,11 @@ export function ContractDeploymentForm() {
               <p className="text-base text-gray-500">
                 Your Gas Price: {adjustedGasPrice} gwei
               </p>
+              {estimatedGas && (
+                <p className="text-base text-gray-500">
+                  Estimated Gas Units: {Number(estimatedGas).toLocaleString()}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -292,7 +340,7 @@ export function ContractDeploymentForm() {
           </Alert>
         )}
 
-        {isGasLoading && (
+        {isGasLoading && !isEstimatingGas && (
           <Alert>
             <AlertDescription className="flex items-center">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
