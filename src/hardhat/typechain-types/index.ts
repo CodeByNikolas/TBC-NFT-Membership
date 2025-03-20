@@ -1,1 +1,1 @@
-export * from '../../../hardhat/typechain-types/factories/TBCNFT__factory';
+export * from './factories/TBCNFT__factory';

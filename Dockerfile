@@ -29,6 +29,7 @@ WORKDIR /app
 
 # Copy dependency files from deps stage
 COPY --from=deps /app/node_modules ./node_modules
+# Copy all project files (including src, hardhat, etc.)
 COPY . .
 
 # Inject build-time env variables
