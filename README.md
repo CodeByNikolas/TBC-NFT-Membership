@@ -109,6 +109,45 @@ This project includes a GitHub Actions workflow for continuous integration and d
 - [wagmi](https://wagmi.sh/) - React hooks for Ethereum
 - [Docker](https://www.docker.com/) - Containerization platform
 - [GitHub Actions](https://github.com/features/actions) - CI/CD workflow
+- [Supabase](https://supabase.com/) - Open source Firebase alternative
+
+## Database Schema (Supabase)
+
+The application uses Supabase for database management. Here's the schema for the main tables:
+
+### contract_deployments
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key (auto-generated) |
+| contract_address | text | Deployed contract address |
+| network | text | Network name (e.g., 'Ethereum Mainnet') |
+| chain_id | integer | Network chain ID |
+| deployer_address | text | Address that deployed the contract |
+| name | text | NFT collection name |
+| symbol | text | NFT collection symbol |
+| base_uri | text | IPFS base URI for NFT metadata |
+| deployment_tx_hash | text | Transaction hash of deployment |
+| deployment_timestamp | timestamp with time zone | When the contract was deployed |
+| verification_status | text | Status of contract verification (pending/verified/failed) |
+| verification_message | text | Message regarding verification process |
+| verification_timestamp | timestamp with time zone | When verification was last updated |
+| source_code | text | Contract source code for verification |
+| created_at | timestamp with time zone | Record creation timestamp |
+
+## Supabase Setup
+
+To set up Supabase for this project:
+
+1. Create a Supabase project at [supabase.com](https://supabase.com)
+2. Create the necessary tables as described in the Database Schema section
+3. Get your Supabase URL and API keys
+4. Add them to your `.env.local` file:
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_KEY=your_service_key
+```
 
 ## Learn More
 

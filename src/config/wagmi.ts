@@ -13,7 +13,7 @@ const amoy = {
     symbol: 'MATIC',
   },
   rpcUrls: {
-    default: { http: ['https://rpc-amoy.polygon.technology'] },
+    default: { http: [`https://polygon-amoy.infura.io/v3/${process.env.INFURA_API_KEY}`] },
   },
   blockExplorers: {
     default: { name: 'PolygonScan Amoy', url: 'https://amoy.polygonscan.com' },
@@ -31,9 +31,9 @@ export const config = createConfig({
     }),
   ],
   transports: {
-    [sepolia.id]: http(),
-    [mainnet.id]: http(),
-    [polygon.id]: http(),
-    [amoy.id]: http(),
+    [sepolia.id]: http(`https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`),
+    [mainnet.id]: http(`https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`),
+    [polygon.id]: http(`https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`),
+    [amoy.id]: http(`https://polygon-amoy.infura.io/v3/${process.env.INFURA_API_KEY}`),
   },
 }) 

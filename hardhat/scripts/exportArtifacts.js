@@ -6,6 +6,10 @@ async function main() {
   const artifactPath = path.join(__dirname, '../artifacts/contracts/TBCNFT.sol/TBCNFT.json');
   const artifact = require(artifactPath);
 
+  // Get the source code
+  const sourcePath = path.join(__dirname, '../contracts/TBCNFT.sol');
+  const sourceCode = fs.readFileSync(sourcePath, 'utf8');
+
   // Create the output directory if it doesn't exist
   const outputDir = path.join(__dirname, '../../src/contracts');
   if (!fs.existsSync(outputDir)) {
@@ -16,6 +20,7 @@ async function main() {
   const contractData = {
     abi: artifact.abi,
     bytecode: artifact.bytecode,
+    sourceCode
   };
 
   fs.writeFileSync(
