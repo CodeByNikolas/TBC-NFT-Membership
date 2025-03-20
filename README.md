@@ -124,3 +124,36 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Supported Networks
+
+The application supports the following networks for contract deployment and interaction:
+
+### Ethereum
+- Sepolia Testnet
+- Mainnet
+
+### Polygon
+- Amoy Testnet
+- Mainnet
+
+## Contract Deployment
+
+The application uses Hardhat for smart contract development and deployment. The contract deployment is handled directly from the browser using the connected wallet.
+
+### Required API Keys
+- Etherscan API Key (for Ethereum contract verification)
+- Polygonscan API Key (for Polygon contract verification)
+
+### Contract Deployment Process
+1. Connect your wallet
+2. Select the desired network
+3. Fill in the contract deployment form with:
+   - Token Name
+   - Token Symbol
+   - IPFS Base URI (optional)
+4. Deploy the contract
+
+The deployed contract will be owned by the connected wallet address.
+
+Note: For contract deployment, the application will use the RPC provider from your connected wallet. Custom RPC URLs are optional and can be configured in the `.env` file if needed.
