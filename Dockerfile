@@ -18,7 +18,7 @@ COPY package.json package-lock.json ./
 # Install ALL dependencies including dev dependencies
 # Use --ignore-scripts to avoid running build scripts that require native modules
 # We'll rebuild them after all deps are installed
-RUN npm install --ignore-scripts
+RUN npm install --ignore-scripts --legacy-peer-deps
 
 # Rebuild any native modules that need compilation
 RUN npm rebuild

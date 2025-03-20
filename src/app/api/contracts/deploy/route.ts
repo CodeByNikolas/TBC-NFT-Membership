@@ -50,24 +50,26 @@ export async function POST(request: Request) {
       baseURI: contractBaseURI
     });
 
-    // Deploy the contract
+    // Deploy the contract with updated ethers v6 syntax
+    const deployOptions = {
+      gasLimit: gasLimit ? BigInt(gasLimit) : undefined,
+      maxPriorityFeePerGas: maxPriorityFeePerGas ? BigInt(maxPriorityFeePerGas) : undefined,
+      maxFeePerGas: maxFeePerGas ? BigInt(maxFeePerGas) : undefined
+    };
+
     const contract = await contractFactory.deploy(
       contractName,
       contractSymbol,
       deployerAddress,
       contractBaseURI,
-      {
-        gasLimit: gasLimit ? ethers.BigNumber.from(gasLimit) : undefined,
-        maxPriorityFeePerGas: maxPriorityFeePerGas ? ethers.BigNumber.from(maxPriorityFeePerGas) : undefined,
-        maxFeePerGas: maxFeePerGas ? ethers.BigNumber.from(maxFeePerGas) : undefined
-      }
+      deployOptions
     );
 
-    console.log(`Contract deployment transaction submitted: ${contract.deployTransaction.hash}`);
+    console.log(`Contract deployment transaction submitted: ${contract.deploymentTransaction?.hash}`);
 
-    // Wait for the contract to be deployed
-    const receipt = await contract.deployTransaction.wait();
-    const contractAddress = contract.address;
+    // Wait for the contract to be deployed (ethers v6 syntax)
+    const receipt = await contract.deploymentTransaction?.wait();
+    const contractAddress = await contract.getAddress();
 
     console.log(`Contract deployed successfully at ${contractAddress}`);
 
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
         deployer_address: deployerAddress,
         network: network,
         chain_id: chainId,
-        transaction_hash: receipt.transactionHash,
+        transaction_hash: receipt?.hash,
         deployment_timestamp: new Date().toISOString(),
         verification_status: 'pending',
         verification_message: 'Verification will be attempted soon',
@@ -119,7 +121,7 @@ export async function POST(request: Request) {
       success: true,
       contract_address: contractAddress,
       network,
-      transaction_hash: receipt.transactionHash,
+      transaction_hash: receipt?.hash,
       deployment_id: deployment.id
     });
   } catch (error: any) {
