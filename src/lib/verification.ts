@@ -277,31 +277,87 @@ class ContractVerificationService implements VerificationService {
       
       // Verify contract path exists
       if (!fs.existsSync(contractPath)) {
-        throw new Error(`Contract file not found at: ${contractPath}`);
+        console.warn(`Contract file not found at: ${contractPath}, trying alternate path...`);
+        // Try alternate paths that might be used in Docker
+        const altPaths = [
+          path.resolve('/app/hardhat/contracts/TBCNFT.sol'),
+          path.resolve('./hardhat/contracts/TBCNFT.sol'),
+          path.resolve('../hardhat/contracts/TBCNFT.sol')
+        ];
+        
+        let found = false;
+        for (const altPath of altPaths) {
+          if (fs.existsSync(altPath)) {
+            console.log(`Found contract file at alternate path: ${altPath}`);
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          throw new Error(`Contract file not found in any expected locations`);
+        }
       }
       
       // Load the Hardhat build info
       const buildInfoDir = path.resolve('hardhat/artifacts/build-info');
+      let buildInfo; // Define buildInfo variable in the outer scope
       
       if (!fs.existsSync(buildInfoDir)) {
-        throw new Error(`Build info directory not found at: ${buildInfoDir}`);
+        console.warn(`Build info directory not found at: ${buildInfoDir}, trying alternate paths...`);
+        // Try alternate paths that might be used in Docker
+        const altDirs = [
+          path.resolve('/app/hardhat/artifacts/build-info'),
+          path.resolve('./hardhat/artifacts/build-info'),
+          path.resolve('../hardhat/artifacts/build-info')
+        ];
+        
+        let foundDir = '';
+        for (const altDir of altDirs) {
+          if (fs.existsSync(altDir)) {
+            console.log(`Found build info directory at alternate path: ${altDir}`);
+            foundDir = altDir;
+            break;
+          }
+        }
+        
+        if (!foundDir) {
+          throw new Error(`Build info directory not found at: ${buildInfoDir}. Try manually at ${this.getExplorerUrl(network, chainId, contractAddress)}/contract-verification`);
+        }
+        
+        // Use the found directory
+        const buildInfoFiles = fs.readdirSync(foundDir);
+        
+        if (buildInfoFiles.length === 0) {
+          throw new Error('No build info files found');
+        }
+        
+        // Read the most recent build info file
+        const buildInfoPath = path.join(foundDir, buildInfoFiles[0]);
+        
+        if (!fs.existsSync(buildInfoPath)) {
+          throw new Error(`Build info file not found at: ${buildInfoPath}`);
+        }
+        
+        console.log(`Using build info file: ${buildInfoPath}`);
+        buildInfo = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8'));
+      } else {
+        const buildInfoFiles = fs.readdirSync(buildInfoDir);
+        
+        if (buildInfoFiles.length === 0) {
+          throw new Error('No build info files found');
+        }
+        
+        // Read the most recent build info file
+        const buildInfoPath = path.join(buildInfoDir, buildInfoFiles[0]);
+        
+        if (!fs.existsSync(buildInfoPath)) {
+          throw new Error(`Build info file not found at: ${buildInfoPath}`);
+        }
+        
+        console.log(`Using build info file: ${buildInfoPath}`);
+        buildInfo = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8'));
       }
-      
-      const buildInfoFiles = fs.readdirSync(buildInfoDir);
-      
-      if (buildInfoFiles.length === 0) {
-        throw new Error('No build info files found');
-      }
-      
-      // Read the most recent build info file
-      const buildInfoPath = path.join(buildInfoDir, buildInfoFiles[0]);
-      
-      if (!fs.existsSync(buildInfoPath)) {
-        throw new Error(`Build info file not found at: ${buildInfoPath}`);
-      }
-      
-      console.log(`Using build info file: ${buildInfoPath}`);
-      const buildInfo = JSON.parse(fs.readFileSync(buildInfoPath, 'utf8'));
       
       // Get the compiler input
       const compilerInput = buildInfo.input;

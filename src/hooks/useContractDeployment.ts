@@ -1,6 +1,6 @@
 'use client'
 
-import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData } from 'wagmi'
+import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData, usePublicClient } from 'wagmi'
 import { parseEther, formatUnits, encodeAbiParameters } from 'viem'
 import contractData from '@/contracts/TBCNFT.json'
 import axios from 'axios'
@@ -42,6 +42,7 @@ export function useContractDeployment(): ContractDeploymentHook {
   const { address } = useAccount()
   const chainId = useChainId()
   const { data: feeData } = useFeeData()
+  const publicClient = usePublicClient()
   
   const { deployContract, data: hash, isPending } = useDeployContract()
   
@@ -84,14 +85,7 @@ export function useContractDeployment(): ContractDeploymentHook {
         throw new Error('Invalid contract bytecode format');
       }
       
-      // For actual gas estimation, you would use wagmi's estimateGas directly
-      // Here we're making an RPC call to estimate gas
-      const rpcUrl = getRpcUrl(chainId);
-      if (!rpcUrl) {
-        throw new Error('No RPC URL available for this network');
-      }
-      
-      // Prepare the data for the contract deployment
+      // Prepare the encoded constructor arguments
       const encodedConstructorArgs = encodeAbiParameters(
         [
           { name: 'name', type: 'string' },
@@ -116,9 +110,37 @@ export function useContractDeployment(): ContractDeploymentHook {
       const bytecode = rawBytecode as `0x${string}`;
       const deployData = `${bytecode}${encodedConstructorArgs.slice(2)}` as `0x${string}`;
       
+      // First try to use wagmi's publicClient which uses the wallet's provider
+      if (publicClient) {
+        try {
+          console.log('Estimating gas using connected wallet provider...');
+          const gasEstimate = await publicClient.estimateGas({
+            account: initialOwner,
+            data: deployData
+          });
+          
+          console.log('Raw gas estimate result from wallet provider:', gasEstimate);
+          
+          // Add a 20% buffer to the estimate for safety
+          const estimatedWithBuffer = gasEstimate + (gasEstimate * BigInt(20) / BigInt(100));
+          
+          console.log(`Final gas estimate: ${estimatedWithBuffer} (with 20% buffer)`);
+          return estimatedWithBuffer;
+        } catch (walletError) {
+          console.warn('Failed to estimate gas using wallet provider, falling back to RPC:', walletError);
+          // Fall through to the RPC method below
+        }
+      }
+
+      // Fallback to manual RPC call if publicClient isn't available or fails
+      const rpcUrl = getRpcUrl(chainId);
+      if (!rpcUrl) {
+        throw new Error('No RPC URL available for this network');
+      }
+      
       // Estimate gas through RPC with timeout protection
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       
       try {
         const response = await fetch(rpcUrl, {
@@ -202,7 +224,24 @@ export function useContractDeployment(): ContractDeploymentHook {
       
       const checkTransaction = async () => {
         try {
-          // Get the RPC URL for the current chain
+          // First try to use the wallet's provider through wagmi publicClient
+          if (publicClient) {
+            try {
+              console.log('Checking transaction receipt using wallet provider...');
+              const receipt = await publicClient.getTransactionReceipt({ hash });
+              
+              if (receipt) {
+                console.log('Receipt found from wallet provider:', receipt);
+                setManuallyConfirmed(true);
+                setContractAddress(receipt.contractAddress);
+                return;
+              }
+            } catch (walletError) {
+              console.warn('Failed to get receipt from wallet, falling back to RPC:', walletError);
+            }
+          }
+          
+          // Fallback to manual RPC call
           const rpcUrl = getRpcUrl(chainId);
           if (!rpcUrl) return;
           
@@ -246,7 +285,7 @@ export function useContractDeployment(): ContractDeploymentHook {
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [hash, isSuccess, chainId, manuallyConfirmed]);
+  }, [hash, isSuccess, chainId, manuallyConfirmed, publicClient]);
 
   // Add a useEffect to handle recording the deployment once the receipt is available
   // This will trigger for both the wagmi hook success and our manual confirmation
@@ -540,17 +579,18 @@ export function useContractDeployment(): ContractDeploymentHook {
   };
 }
 
-// Helper function to get RPC URL for the current chain
+// Helper function to get RPC URL for the current chain - ONLY used as fallback now
 function getRpcUrl(chainId: number): string | null {
+  // Use public RPCs as fallbacks
   switch (chainId) {
     case 1:
-      return `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY || localStorage.getItem('infuraKey') || ''}`;
+      return 'https://eth.llamarpc.com';
     case 11155111:
-      return `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY || localStorage.getItem('infuraKey') || ''}`;
+      return 'https://rpc.sepolia.org';
     case 137:
-      return `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY || localStorage.getItem('infuraKey') || ''}`;
+      return 'https://polygon-rpc.com';
     case 80002:
-      return `https://polygon-amoy.infura.io/v3/${process.env.INFURA_API_KEY || localStorage.getItem('infuraKey') || ''}`;
+      return 'https://rpc-amoy.polygon.technology';
     default:
       return null;
   }

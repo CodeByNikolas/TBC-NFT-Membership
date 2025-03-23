@@ -53,7 +53,13 @@ ENV NODE_ENV=production
 ENV NEXT_TYPESCRIPT_CHECK=true
 ENV NEXT_ESLINT_CHECK=true
 
-# Build the application
+# Compile Hardhat contracts to generate build-info files
+RUN cd hardhat && npx hardhat compile
+
+# Export contract artifacts to src/contracts for the frontend
+RUN cd hardhat && node scripts/exportArtifacts.js
+
+# Build the Next.js application
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -88,6 +94,11 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Copy Hardhat artifacts for contract verification
+COPY --from=builder --chown=nextjs:nodejs /app/hardhat/artifacts ./hardhat/artifacts
+COPY --from=builder --chown=nextjs:nodejs /app/hardhat/contracts ./hardhat/contracts
+COPY --from=builder --chown=nextjs:nodejs /app/hardhat/hardhat.config.js ./hardhat/hardhat.config.js
 
 # Use the non-root user 
 USER nextjs
