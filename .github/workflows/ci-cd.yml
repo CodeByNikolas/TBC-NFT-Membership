@@ -83,7 +83,7 @@ jobs:
             NPM_CONFIG_FUND=false
             NPM_CONFIG_AUDIT=false
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache
-          cache-to: ${{ github.event_name != 'pull_request' && 'type=registry,ref=ghcr.io/${{ env.REPO_LOWERCASE }}:cache,mode=max' || 'type=inline' }}
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:cache,mode=max', env.REPO_LOWERCASE) || 'type=inline' }}
         env:
           BUILDKIT_PROGRESS: plain
           DOCKER_BUILDKIT: 1
