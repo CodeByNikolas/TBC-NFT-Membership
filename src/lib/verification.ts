@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase';
-import axios from 'axios';
 import FormData from 'form-data';
+import api from './api';
 
 interface VerificationService {
   start(): Promise<void>;
@@ -413,7 +413,7 @@ class ContractVerificationService implements VerificationService {
       
       try {
         // Submit the verification request
-        const response = await axios.post(apiEndpoint, data, {
+        const response = await api.post(apiEndpoint, data, {
           headers: {
             ...data.getHeaders(),
             'Content-Type': 'multipart/form-data'
@@ -534,7 +534,7 @@ class ContractVerificationService implements VerificationService {
       params.append('action', 'checkverifystatus');
       params.append('guid', guid);
       
-      const response = await axios.get(`${apiEndpoint}?${params.toString()}`);
+      const response = await api.get(`${apiEndpoint}?${params.toString()}`);
       
       console.log('Verification status response:', JSON.stringify(response.data, null, 2));
       

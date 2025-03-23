@@ -21,6 +21,9 @@ export function useDeployContract() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
         body: JSON.stringify(formData),
       });
@@ -37,6 +40,9 @@ export function useDeployContract() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
             },
             body: JSON.stringify({
               deployment_id: data.deployment_id,

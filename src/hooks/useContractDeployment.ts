@@ -3,7 +3,7 @@
 import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData, usePublicClient } from 'wagmi'
 import { parseEther, formatUnits, encodeAbiParameters } from 'viem'
 import contractData from '@/contracts/TBCNFT.json'
-import axios from 'axios'
+import api from '@/lib/api'
 import React from 'react'
 
 interface DeployContractResult {
@@ -310,7 +310,7 @@ export function useContractDeployment(): ContractDeploymentHook {
           setRecordedInSupabase(true);
           
           // Record deployment in Supabase with all required fields
-          await axios.post('/api/contracts/deployments', {
+          await api.post('/contracts/deployments', {
             contract_address: confirmedContractAddress,
             network: getNetworkName(chainId),
             chain_id: chainId,

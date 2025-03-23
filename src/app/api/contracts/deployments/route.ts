@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { verificationService } from '@/lib/verification';
+import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
 
 // Check if we're in a build environment
 const isBuildTime = process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build';
@@ -98,7 +99,7 @@ const handlers = {
     
         if (error) throw error;
     
-        return NextResponse.json({
+        return jsonResponseNoCache({
           data,
           pagination: {
             total: count,
@@ -107,10 +108,7 @@ const handlers = {
           }
         });
       } catch (error: any) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 500 }
-        );
+        return errorResponseNoCache(error.message, 500);
       }
     }
   },

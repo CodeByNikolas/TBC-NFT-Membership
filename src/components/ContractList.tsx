@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import axios from 'axios';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Loader2 } from 'lucide-react';
+import api from '@/lib/api';
 
 interface ContractDeployment {
   id: string;
@@ -103,7 +103,7 @@ export function ContractList() {
       if (address) {
         try {
           setLoading(true);
-          const response = await axios.get('/api/contracts/deployments', {
+          const response = await api.get('/api/contracts/deployments', {
             params: {
               page: 1,
               limit: 10,
@@ -214,7 +214,7 @@ export function ContractList() {
         setLoading(true);
       }
       
-      const response = await axios.get('/api/contracts/deployments', {
+      const response = await api.get('/api/contracts/deployments', {
         params: {
           page: pageNum,
           limit: 10,
@@ -320,7 +320,7 @@ export function ContractList() {
       console.log(`Initiating verification for contract: ${contractAddress}`);
       
       // Call the verification API
-      const response = await axios.post('/api/contracts/verify', {
+      const response = await api.post('/api/contracts/verify', {
         contract_address: contractAddress
       });
       
