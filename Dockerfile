@@ -53,14 +53,6 @@ ENV NODE_ENV=production
 ENV NEXT_TYPESCRIPT_CHECK=true
 ENV NEXT_ESLINT_CHECK=true
 
-# Install Hardhat dependencies
-RUN cd hardhat && npm install --save-dev "@nomicfoundation/hardhat-chai-matchers@^2.0.0" "@nomicfoundation/hardhat-ethers@^3.0.0" "@nomicfoundation/hardhat-ignition-ethers@^0.15.0" "@nomicfoundation/hardhat-network-helpers@^1.0.0" "@nomicfoundation/hardhat-verify@^2.0.0" "@typechain/ethers-v6@^0.5.0" "@typechain/hardhat@^9.0.0" "@types/chai@^4.2.0" "@types/mocha@>=9.1.0" "chai@^4.2.0" "hardhat-gas-reporter@^1.0.8" "solidity-coverage@^0.8.1" "typechain@^8.3.0"
-
-# Compile Hardhat contracts to generate build-info files
-RUN cd hardhat && npx hardhat compile
-
-# Ensure artifacts directory exists even if compilation failed
-RUN mkdir -p hardhat/artifacts/build-info
 
 # Export contract artifacts to src/contracts for the frontend, continue even if it fails
 RUN cd hardhat && node scripts/exportArtifacts.js
