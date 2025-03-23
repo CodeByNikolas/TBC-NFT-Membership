@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -25,7 +27,10 @@ interface ContractDeployment {
 
 export function ContractList() {
   const { address } = useAccount();
+  const chainId = useChainId();
   const [contracts, setContracts] = useState<ContractDeployment[]>([]);
+  const [filteredContracts, setFilteredContracts] = useState<ContractDeployment[]>([]);
+  const [showAllNetworks, setShowAllNetworks] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -205,6 +210,32 @@ export function ContractList() {
       return () => clearInterval(interval);
     }
   }, [contracts]);
+
+  // Helper function to get the current network name
+  const getNetworkName = (chainId: number): string => {
+    switch (chainId) {
+      case 1: return 'Ethereum Mainnet';
+      case 11155111: return 'Sepolia Testnet';
+      case 137: return 'Polygon Mainnet';
+      case 80002: return 'Polygon Amoy';
+      default: return 'Unknown Network';
+    }
+  };
+
+  // Effect to filter contracts based on network toggle
+  useEffect(() => {
+    if (showAllNetworks) {
+      setFilteredContracts(contracts);
+    } else {
+      // Filter to only show contracts from the current network
+      const currentNetwork = getNetworkName(chainId);
+      setFilteredContracts(
+        contracts.filter(contract => 
+          currentNetwork.toLowerCase() === contract.network.toLowerCase()
+        )
+      );
+    }
+  }, [contracts, showAllNetworks, chainId]);
 
   // Modify loadContracts to update only the necessary state
   const loadContracts = async (pageNum = 1, isPolling = false) => {
@@ -440,101 +471,131 @@ export function ContractList() {
   }
 
   return (
-    <div className="space-y-4">
-      {contracts.map(contract => (
-        <div key={contract.id} className="p-6 bg-white rounded-lg shadow-md">
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-xl font-bold">{contract.name}</h3>
-              <p className="text-gray-600">Symbol: {contract.symbol}</p>
-            </div>
-            <span className={`font-semibold ${getStatusColor(contract.verification_status)}`}>
-              Verification: {contract.verification_status.charAt(0).toUpperCase() + contract.verification_status.slice(1)}
-            </span>
-          </div>
-          
-          <div className="mt-4 space-y-2">
-            <p className="text-sm">
-              <span className="font-medium">Address:</span>{' '}
-              <a
-                href={getBlockExplorerUrl(contract.network, contract.contract_address)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-blue-500 hover:underline"
-              >
-                {contract.contract_address}
-              </a>
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Network:</span> {contract.network}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Deployment:</span>{' '}
-              <a
-                href={getBlockExplorerUrl(contract.network, contract.deployment_tx_hash, true)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                View Transaction
-              </a>
-            </p>
-            {contract.verification_message && (
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Message:</span> {contract.verification_message}
-              </p>
-            )}
-            
-            {/* Verification button */}
-            {(contract.verification_status === 'pending' || contract.verification_status === 'failed') && (
-              <div className="mt-4">
-                {contract.verification_status === 'pending' && isRecentlyDeployed(contract) ? (
-                  <Button 
-                    disabled
-                    size="sm"
-                    variant="outline"
-                    className="flex items-center"
+    <div className="space-y-6">
+      <div className="flex items-center space-x-2">
+        <Switch 
+          id="network-toggle" 
+          checked={showAllNetworks}
+          onCheckedChange={setShowAllNetworks}
+        />
+        <Label htmlFor="network-toggle">
+          {showAllNetworks ? "Showing all networks" : "Showing current network only"}
+        </Label>
+      </div>
+
+      {loading && page === 1 ? (
+        <div className="flex justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+        </div>
+      ) : error ? (
+        <div className="p-4 border rounded-md bg-red-50 text-red-500">
+          {error}
+        </div>
+      ) : filteredContracts.length === 0 ? (
+        <div className="p-6 text-center border rounded-md bg-gray-50">
+          <p className="text-gray-500">No contracts found</p>
+          <Link href="/create">
+            <Button className="mt-4">Deploy New Contract</Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredContracts.map(contract => (
+            <div key={contract.id} className="p-6 bg-white rounded-lg shadow-md">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-bold">{contract.name}</h3>
+                  <p className="text-gray-600">Symbol: {contract.symbol}</p>
+                </div>
+                <span className={`font-semibold ${getStatusColor(contract.verification_status)}`}>
+                  Verification: {contract.verification_status.charAt(0).toUpperCase() + contract.verification_status.slice(1)}
+                </span>
+              </div>
+              
+              <div className="mt-4 space-y-2">
+                <p className="text-sm">
+                  <span className="font-medium">Address:</span>{' '}
+                  <a
+                    href={getBlockExplorerUrl(contract.network, contract.contract_address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-blue-500 hover:underline"
                   >
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {getWaitTimeMessage(contract)}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={() => handleVerifyContract(contract.contract_address)}
-                    disabled={
-                      verifyingContracts[contract.contract_address] || 
-                      (cooldowns[contract.contract_address] > 0)
-                    }
-                    size="sm"
-                    variant="outline"
-                    className="flex items-center"
+                    {contract.contract_address}
+                  </a>
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Network:</span> {contract.network}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Deployment:</span>{' '}
+                  <a
+                    href={getBlockExplorerUrl(contract.network, contract.deployment_tx_hash, true)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
                   >
-                    {verifyingContracts[contract.contract_address] ? (
-                      <>
+                    View Transaction
+                  </a>
+                </p>
+                {contract.verification_message && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Message:</span> {contract.verification_message}
+                  </p>
+                )}
+                
+                {/* Verification button */}
+                {(contract.verification_status === 'pending' || contract.verification_status === 'failed') && (
+                  <div className="mt-4">
+                    {contract.verification_status === 'pending' && isRecentlyDeployed(contract) ? (
+                      <Button 
+                        disabled
+                        size="sm"
+                        variant="outline"
+                        className="flex items-center"
+                      >
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : cooldowns[contract.contract_address] && cooldowns[contract.contract_address] > 0 ? (
-                      `Retry in ${formatCooldown(cooldowns[contract.contract_address])}`
+                        {getWaitTimeMessage(contract)}
+                      </Button>
                     ) : (
-                      contract.verification_status === 'failed' ? 'Retry Verification' : 'Verify Contract'
+                      <Button 
+                        onClick={() => handleVerifyContract(contract.contract_address)}
+                        disabled={
+                          verifyingContracts[contract.contract_address] || 
+                          (cooldowns[contract.contract_address] > 0)
+                        }
+                        size="sm"
+                        variant="outline"
+                        className="flex items-center"
+                      >
+                        {verifyingContracts[contract.contract_address] ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : cooldowns[contract.contract_address] && cooldowns[contract.contract_address] > 0 ? (
+                          `Retry in ${formatCooldown(cooldowns[contract.contract_address])}`
+                        ) : (
+                          contract.verification_status === 'failed' ? 'Retry Verification' : 'Verify Contract'
+                        )}
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      ))}
-      
-      {hasMore && (
-        <div className="text-center py-4">
-          <Button
-            onClick={loadMore}
-            variant="outline"
-          >
-            Load More
-          </Button>
+            </div>
+          ))}
+          
+          {hasMore && (
+            <div className="text-center py-4">
+              <Button
+                onClick={loadMore}
+                variant="outline"
+              >
+                Load More
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
