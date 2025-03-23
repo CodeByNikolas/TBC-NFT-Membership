@@ -83,6 +83,7 @@ const handlers = {
         const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '10');
         const deployer_address = searchParams.get('deployer_address');
+        const id = searchParams.get('id');
         const offset = (page - 1) * limit;
     
         let query = supabaseAdmin
@@ -91,6 +92,10 @@ const handlers = {
     
         if (deployer_address) {
           query = query.eq('deployer_address', deployer_address);
+        }
+        
+        if (id) {
+          query = query.eq('id', id);
         }
     
         const { data, error, count } = await query

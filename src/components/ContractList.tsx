@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from 'lucide-react';
+import { Loader2, Edit } from 'lucide-react';
 import api from '@/lib/api';
 
 interface ContractDeployment {
@@ -420,6 +420,17 @@ export function ContractList() {
     return secondsSinceDeployment < 120; // Block retries for 120 seconds
   };
   
+  // Add missing functions
+  const isRecentlyVerified = (contract: ContractDeployment): boolean => {
+    return cooldowns[contract.id] > 0;
+  };
+  
+  const isVerificationDisabled = (contractId: string): boolean => {
+    return verifyingContracts[contractId] || 
+           (cooldowns[contractId] > 0) || 
+           filteredContracts.find(c => c.id === contractId)?.verification_status === 'verified';
+  };
+  
   // Update getWaitTimeMessage to use 120 seconds
   const getWaitTimeMessage = (contract: ContractDeployment): string => {
     const timestamp = contract.deployment_timestamp || contract.created_at;
@@ -545,43 +556,41 @@ export function ContractList() {
                 )}
                 
                 {/* Verification button */}
-                {(contract.verification_status === 'pending' || contract.verification_status === 'failed') && (
-                  <div className="mt-4">
-                    {contract.verification_status === 'pending' && isRecentlyDeployed(contract) ? (
-                      <Button 
-                        disabled
-                        size="sm"
-                        variant="outline"
-                        className="flex items-center"
-                      >
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {getWaitTimeMessage(contract)}
-                      </Button>
-                    ) : (
-                      <Button 
-                        onClick={() => handleVerifyContract(contract.contract_address)}
-                        disabled={
-                          verifyingContracts[contract.contract_address] || 
-                          (cooldowns[contract.contract_address] > 0)
-                        }
-                        size="sm"
-                        variant="outline"
-                        className="flex items-center"
-                      >
-                        {verifyingContracts[contract.contract_address] ? (
+                {contract.verification_status !== 'verified' && (
+                  <>
+                    <Button
+                      onClick={() => handleVerifyContract(contract.id)}
+                      disabled={isVerificationDisabled(contract.id)}
+                      variant="outline"
+                      size="sm"
+                      className="mr-2"
+                    >
+                      {verifyingContracts[contract.id] ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        isRecentlyVerified(contract) ? (
                           <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Verifying...
+                            Retry in {cooldowns[contract.id] || 0}s
                           </>
-                        ) : cooldowns[contract.contract_address] && cooldowns[contract.contract_address] > 0 ? (
-                          `Retry in ${formatCooldown(cooldowns[contract.contract_address])}`
                         ) : (
-                          contract.verification_status === 'failed' ? 'Retry Verification' : 'Verify Contract'
-                        )}
-                      </Button>
-                    )}
-                  </div>
+                          'Verify Contract'
+                        )
+                      )}
+                    </Button>
+                  </>
                 )}
+                
+                {/* Edit NFT Button */}
+                <Link href={`/nft-editing?contractId=${contract.id}`}>
+                  <Button variant="outline" size="sm" className="ml-2">
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit NFTs
+                  </Button>
+                </Link>
+                
               </div>
             </div>
           ))}
