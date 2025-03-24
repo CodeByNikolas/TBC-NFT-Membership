@@ -14,6 +14,8 @@ const handlers = {
       try {
         const body = await request.json();
         
+        console.log('Received deployment data:', JSON.stringify(body, null, 2));
+        
         // Set deployment timestamp if not provided
         if (!body.deployment_timestamp) {
           body.deployment_timestamp = new Date().toISOString();
@@ -22,7 +24,6 @@ const handlers = {
         // Validate required fields
         const requiredFields = [
           'contract_address', 
-          'network', 
           'chain_id', 
           'deployer_address', 
           'name', 

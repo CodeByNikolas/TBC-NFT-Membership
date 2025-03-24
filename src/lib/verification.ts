@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase';
 import FormData from 'form-data';
 import api from './api';
+import { getAddressExplorerUrl, getNetworkNameFromChainId } from '@/lib/networkUtils';
 
 interface VerificationService {
   start(): Promise<void>;
@@ -89,60 +90,43 @@ class ContractVerificationService implements VerificationService {
     await this.verifyContract(deploymentWithoutDelay);
   }
 
-  // Get API endpoints based on the network
-  private getApiEndpoint(network: string, chainId: number): string {
-    // Map network names to API endpoints
-    switch(network.toLowerCase()) {
-      case 'ethereum mainnet':
+  // Get API endpoints based on the chain ID
+  private getApiEndpoint(chainId: number): string {
+    // Map chain IDs to API endpoints
+    switch(chainId) {
+      case 1:
         return 'https://api.etherscan.io/api';
-      case 'sepolia testnet':
+      case 11155111:
         return 'https://api-sepolia.etherscan.io/api';
-      case 'polygon mainnet':
+      case 137:
         return 'https://api.polygonscan.com/api';
-      case 'polygon amoy':
+      case 80002:
         return 'https://api-amoy.polygonscan.com/api';
       default:
-        // Fallback based on chain ID
-        if (chainId === 1) return 'https://api.etherscan.io/api';
-        if (chainId === 11155111) return 'https://api-sepolia.etherscan.io/api';
-        if (chainId === 137) return 'https://api.polygonscan.com/api';
-        if (chainId === 80002) return 'https://api-amoy.polygonscan.com/api';
-        
-        throw new Error(`Unsupported network: ${network} (chainId: ${chainId})`);
+        throw new Error(`Unsupported chain ID: ${chainId}`);
     }
   }
 
-  // Get the appropriate API key based on the network
-  private getApiKey(network: string): string {
-    if (network.toLowerCase().includes('ethereum') || network.toLowerCase().includes('sepolia')) {
+  // Get the appropriate API key based on the chain ID
+  private getApiKey(chainId: number): string {
+    // Ethereum networks
+    if (chainId === 1 || chainId === 11155111) {
       return process.env.ETHERSCAN_API_KEY || '';
-    } else if (network.toLowerCase().includes('polygon')) {
+    } 
+    // Polygon networks
+    else if (chainId === 137 || chainId === 80002) {
       return process.env.POLYGONSCAN_API_KEY || '';
     }
     return '';
   }
 
-  // Get the explorer URL for a specific network and contract address
-  private getExplorerUrl(network: string, chainId: number, contractAddress: string): string {
-    switch(network.toLowerCase()) {
-      case 'ethereum mainnet':
-        return `https://etherscan.io/address/${contractAddress}#code`;
-      case 'sepolia testnet':
-        return `https://sepolia.etherscan.io/address/${contractAddress}#code`;
-      case 'polygon mainnet':
-        return `https://polygonscan.com/address/${contractAddress}#code`;
-      case 'polygon amoy':
-        return `https://amoy.polygonscan.com/address/${contractAddress}#code`;
-      default:
-        // Fallback based on chain ID
-        if (chainId === 1) return `https://etherscan.io/address/${contractAddress}#code`;
-        if (chainId === 11155111) return `https://sepolia.etherscan.io/address/${contractAddress}#code`;
-        if (chainId === 137) return `https://polygonscan.com/address/${contractAddress}#code`;
-        if (chainId === 80002) return `https://amoy.polygonscan.com/address/${contractAddress}#code`;
-        
-        return `https://etherscan.io/address/${contractAddress}#code`;
-    }
+  // Get the explorer URL for a specific contract address based on chain ID
+  private getExplorerUrl(chainId: number, contractAddress: string): string {
+    const networkName = getNetworkNameFromChainId(chainId);
+    const baseUrl = getAddressExplorerUrl(contractAddress, networkName);
+    return baseUrl ? `${baseUrl}#code` : `https://etherscan.io/address/${contractAddress}#code`;
   }
+
 
   // Extract constructor arguments
   private async extractConstructorArguments(deployment: any): Promise<string> {
@@ -202,19 +186,57 @@ class ContractVerificationService implements VerificationService {
 
   // Verify the contract using the appropriate block explorer API
   public async verifyContract(deployment: any) {
+    // Simple circuit breaker implementation
+    const circuitBreakerKey = `circuit_breaker_${deployment.chain_id}`;
+    const circuitBreakerStorage = global as any;
+    
+    // Initialize circuit breaker state if needed
+    if (!circuitBreakerStorage[circuitBreakerKey]) {
+      circuitBreakerStorage[circuitBreakerKey] = {
+        failures: 0,
+        lastFailure: 0,
+        isOpen: false,
+        resetTimeout: 30 * 60 * 1000 // 30 minutes until circuit resets
+      };
+    }
+    
+    const circuitBreaker = circuitBreakerStorage[circuitBreakerKey];
+    const now = Date.now();
+    
+    // Check if circuit is open (too many failures recently)
+    if (circuitBreaker.isOpen) {
+      // Check if we should reset the circuit breaker
+      if (now - circuitBreaker.lastFailure > circuitBreaker.resetTimeout) {
+        console.log(`Circuit breaker for chain ${deployment.chain_id} reset after cooling period`);
+        circuitBreaker.isOpen = false;
+        circuitBreaker.failures = 0;
+      } else {
+        // Circuit is open, skip API calls and provide direct link for manual verification
+        console.log(`Circuit breaker for chain ${deployment.chain_id} is open. Skipping API calls.`);
+        const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
+        const verifyUrl = `${explorerUrl.replace('#code', '')}/contract-verification`;
+        
+        await this.updateVerificationStatus(
+          deployment.id,
+          'failed',
+          `Verification API unavailable. Please try manually at ${verifyUrl}`
+        );
+        return;
+      }
+    }
+    
     try {
-      const network = deployment.network;
       const chainId = deployment.chain_id;
       const contractAddress = deployment.contract_address;
       
-      console.log(`Verifying contract ${contractAddress} on ${network} (chain ID: ${chainId})...`);
+      console.log(`Verifying contract ${contractAddress} on chain ID: ${chainId}...`);
       
       // Get the appropriate API endpoint and API key
-      const apiEndpoint = this.getApiEndpoint(network, chainId);
-      const apiKey = this.getApiKey(network);
+      const apiEndpoint = this.getApiEndpoint(chainId);
+      const apiKey = this.getApiKey(chainId);
       
       if (!apiKey) {
-        throw new Error(`No API key found for network ${network}`);
+        throw new Error(`No API key found for chain ID ${chainId}`);
       }
       
       // Check how long since contract was deployed - we need to allow time for indexing
@@ -322,7 +344,7 @@ class ContractVerificationService implements VerificationService {
         }
         
         if (!foundDir) {
-          throw new Error(`Build info directory not found at: ${buildInfoDir}. Try manually at ${this.getExplorerUrl(network, chainId, contractAddress)}/contract-verification`);
+          throw new Error(`Build info directory not found at: ${buildInfoDir}. Try manually at ${this.getExplorerUrl(chainId, contractAddress)}/contract-verification`);
         }
         
         // Use the found directory
@@ -403,7 +425,6 @@ class ContractVerificationService implements VerificationService {
       console.log(`Submitting verification request to ${apiEndpoint}...`);
       console.log('Verification request details:', {
         contractAddress,
-        network,
         chainId,
         compilerVersion: 'v0.8.20+commit.a1b79de6',
         format: 'solidity-standard-json-input',
@@ -412,92 +433,138 @@ class ContractVerificationService implements VerificationService {
       });
       
       try {
-        // Submit the verification request
-        const response = await api.post(apiEndpoint, data, {
-          headers: {
-            ...data.getHeaders(),
-            'Content-Type': 'multipart/form-data'
-          },
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity
-        });
+        // Submit the verification request with retry mechanism
+        let retries = 5; // Increased from 3 to 5 retries
+        let lastError = null;
         
-        console.log('Verification response:', JSON.stringify(response.data, null, 2));
-        
-        // Check the response
-        if (response.data && response.data.status === '1') {
-          // The verification was submitted successfully, but we need to check its status
-          const guid = response.data.result;
-          
-          // Update the contract status to indicate verification is in progress
-          await this.updateVerificationStatus(
-            deployment.id,
-            'pending',
-            `Verification submitted. Checking status...`
-          );
-          
-          // Check the verification status after a delay
-          setTimeout(async () => {
-            await this.checkVerificationStatus(deployment, guid, apiEndpoint, apiKey);
-          }, 15000); // Wait 15 seconds before checking status
-          
-          return;
-        } else {
-          // Check if "already verified" message is in the response
-          const errorMessage = response.data.result || 'Unknown error';
-          
-          if (errorMessage.includes('Already Verified') || errorMessage.includes('Contract source code already verified')) {
-            // Contract is already verified - treat this as success
-            const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
+        while (retries > 0) {
+          try {
+            const response = await api.post(apiEndpoint, data, {
+              headers: {
+                ...data.getHeaders(),
+                'Content-Type': 'multipart/form-data'
+              },
+              // Use even longer timeout for verification requests
+              timeout: 180000, // 3 minutes
+              // These are already set in the api.ts defaults but adding here explicitly
+              maxContentLength: Infinity,
+              maxBodyLength: Infinity
+            });
             
-            await this.updateVerificationStatus(
-              deployment.id,
-              'verified',
-              `Contract is already verified. View at: ${explorerUrl}`
-            );
+            console.log('Verification response:', JSON.stringify(response.data, null, 2));
             
-            // Force a second update to ensure the UI refreshes
-            setTimeout(async () => {
-              await supabaseAdmin
-                .from('contract_deployments')
-                .update({
-                  verification_status: 'verified',
-                  verification_message: `Contract is verified. View at: ${explorerUrl}`,
-                  verification_timestamp: new Date().toISOString()
-                })
-                .eq('id', deployment.id);
+            // Check the response
+            if (response.data && response.data.status === '1') {
+              // The verification was submitted successfully, but we need to check its status
+              const guid = response.data.result;
               
-              console.log(`Contract ${deployment.contract_address} recognized as already verified.`);
-            }, 1000);
+              // Update the contract status to indicate verification is in progress
+              await this.updateVerificationStatus(
+                deployment.id,
+                'pending',
+                `Verification submitted. Checking status...`
+              );
+              
+              // Check the verification status after a delay
+              setTimeout(async () => {
+                await this.checkVerificationStatus(deployment, guid, apiEndpoint, apiKey);
+              }, 15000); // Wait 15 seconds before checking status
+              
+              return;
+            } else {
+              // Check if "already verified" message is in the response
+              const errorMessage = response.data.result || 'Unknown error';
+              
+              if (errorMessage.includes('Already Verified') || errorMessage.includes('Contract source code already verified')) {
+                // Contract is already verified - treat this as success
+                const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
+                
+                await this.updateVerificationStatus(
+                  deployment.id,
+                  'verified',
+                  `Contract is already verified. View at: ${explorerUrl}`
+                );
+                
+                // Force a second update to ensure the UI refreshes
+                setTimeout(async () => {
+                  await supabaseAdmin
+                    .from('contract_deployments')
+                    .update({
+                      verification_status: 'verified',
+                      verification_message: `Contract is verified. View at: ${explorerUrl}`,
+                      verification_timestamp: new Date().toISOString()
+                    })
+                    .eq('id', deployment.id);
+                  
+                  console.log(`Contract ${deployment.contract_address} recognized as already verified.`);
+                }, 1000);
+                
+                return;
+              } else if (errorMessage.includes('Unable to locate ContractCode')) {
+                // Contract code not yet indexed - retry after a delay
+                console.log(`Contract not yet indexed on chain ID ${deployment.chain_id}. Will retry after delay.`);
+                
+                await this.updateVerificationStatus(
+                  deployment.id,
+                  'pending',
+                  `Contract not yet indexed. Will retry in 30 seconds...`
+                );
+                
+                // Retry after 30 seconds
+                setTimeout(() => {
+                  console.log(`Retrying verification for ${contractAddress} after indexing delay`);
+                  this.verifyContract(deployment);
+                }, 30000);
+                
+                return;
+              } else {
+                // The verification submission failed for a different reason
+                throw new Error(`Verification submission failed: ${errorMessage}`);
+              }
+            }
+          } catch (err: any) {
+            lastError = err;
+            console.log(`Verification attempt failed, retries left: ${retries - 1}`, err);
             
-            return;
-          } else if (errorMessage.includes('Unable to locate ContractCode')) {
-            // Contract code not yet indexed - retry after a delay
-            console.log(`Contract not yet indexed on ${network}. Will retry after delay.`);
+            // Log more detailed error info
+            if (err.code) {
+              console.log(`Error code: ${err.code}`);
+            }
+            if (err.response) {
+              console.log(`Response status: ${err.response.status}`);
+              console.log(`Response data:`, err.response.data);
+            }
             
-            await this.updateVerificationStatus(
-              deployment.id,
-              'pending',
-              `Contract not yet indexed. Will retry in 30 seconds...`
-            );
+            retries--;
             
-            // Retry after 30 seconds
-            setTimeout(() => {
-              console.log(`Retrying verification for ${contractAddress} after indexing delay`);
-              this.verifyContract(deployment);
-            }, 30000);
-            
-            return;
-          } else {
-            // The verification submission failed for a different reason
-            throw new Error(`Verification submission failed: ${errorMessage}`);
+            if (retries > 0) {
+              // Exponential backoff with longer delays
+              const delayMs = Math.pow(2, 5 - retries) * 3000; // 6s, 12s, 24s, 48s backoff
+              console.log(`Waiting ${delayMs/1000} seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
           }
         }
+        
+        // If we get here, all retries failed
+        throw lastError;
       } catch (error: any) {
         console.error('Error verifying contract:', error);
         
+        // Update circuit breaker on API failures
+        if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED' || error.code === 'ECONNRESET') {
+          circuitBreaker.failures += 1;
+          circuitBreaker.lastFailure = Date.now();
+          
+          // Open the circuit after 3 consecutive failures
+          if (circuitBreaker.failures >= 3) {
+            console.log(`Circuit breaker for chain ${deployment.chain_id} opened after ${circuitBreaker.failures} failures`);
+            circuitBreaker.isOpen = true;
+          }
+        }
+        
         // For failed verifications, provide a direct link for manual verification
-        const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
+        const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
         const verifyUrl = `${explorerUrl.replace('#code', '')}/contract-verification`;
         const errorMessage = error.response?.data?.result || error.message || 'Unknown error';
         
@@ -511,7 +578,7 @@ class ContractVerificationService implements VerificationService {
       console.error('Error verifying contract:', error);
       
       // For failed verifications, provide a direct link for manual verification
-      const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
+      const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
       const verifyUrl = `${explorerUrl.replace('#code', '')}/contract-verification`;
       const errorMessage = error.response?.data?.result || error.message || 'Unknown error';
       
@@ -525,108 +592,119 @@ class ContractVerificationService implements VerificationService {
   
   // Check the status of a verification request
   private async checkVerificationStatus(deployment: any, guid: string, apiEndpoint: string, apiKey: string) {
-    try {
-      console.log(`Checking verification status for GUID: ${guid}`);
-      
-      const params = new URLSearchParams();
-      params.append('apikey', apiKey);
-      params.append('module', 'contract');
-      params.append('action', 'checkverifystatus');
-      params.append('guid', guid);
-      
-      const response = await api.get(`${apiEndpoint}?${params.toString()}`);
-      
-      console.log('Verification status response:', JSON.stringify(response.data, null, 2));
-      
-      if (response.data && response.data.status === '1') {
-        // Verification successful
-        const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
+    let retries = 5; // Increased from 3 to 5
+    let lastError = null;
+    
+    while (retries > 0) {
+      try {
+        console.log(`Checking verification status for GUID: ${guid}, retries left: ${retries}`);
         
-        // Update the verification status with immediate write
-        await this.updateVerificationStatus(
-          deployment.id,
-          'verified',
-          `Verified successfully. View at: ${explorerUrl}`
-        );
+        const params = new URLSearchParams();
+        params.append('apikey', apiKey);
+        params.append('module', 'contract');
+        params.append('action', 'checkverifystatus');
+        params.append('guid', guid);
         
-        // Force a second update to ensure the UI refreshes
-        setTimeout(async () => {
-          await supabaseAdmin
-            .from('contract_deployments')
-            .update({
-              verification_status: 'verified',
-              verification_message: `Verified successfully. View at: ${explorerUrl}`,
-              verification_timestamp: new Date().toISOString()
-            })
-            .eq('id', deployment.id);
+        const response = await api.get(`${apiEndpoint}?${params.toString()}`, {
+          timeout: 60000 // Increased from 30 seconds to 60 seconds
+        });
+        
+        console.log('Verification status response:', JSON.stringify(response.data, null, 2));
+        
+        // First check if response contains "Already Verified" regardless of status code
+        if (response.data && response.data.result && 
+            (response.data.result.includes('Already Verified') || 
+             response.data.result.includes('Contract source code already verified'))) {
           
-          console.log(`Contract ${deployment.contract_address} verified status refreshed in database.`);
-        }, 1000);
-        
-        console.log(`Contract ${deployment.contract_address} verified successfully.`);
-      } else if (response.data && response.data.result === 'Pending in queue') {
-        // Still pending, check again later
-        console.log(`Verification for ${deployment.contract_address} still pending. Will check again later.`);
-        
-        await this.updateVerificationStatus(
-          deployment.id,
-          'pending',
-          `Verification is pending in the queue. Please wait...`
-        );
-        
-        // Check again after a delay
-        setTimeout(async () => {
-          await this.checkVerificationStatus(deployment, guid, apiEndpoint, apiKey);
-        }, 30000); // Wait 30 seconds before checking again
-      } else if (response.data && response.data.result === 'Already Verified') {
-        // Contract is already verified - treat this as success
-        const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
-        
-        await this.updateVerificationStatus(
-          deployment.id,
-          'verified',
-          `Contract is already verified. View at: ${explorerUrl}`
-        );
-        
-        // Force a second update to ensure the UI refreshes
-        setTimeout(async () => {
-          await supabaseAdmin
-            .from('contract_deployments')
-            .update({
-              verification_status: 'verified',
-              verification_message: `Contract is verified. View at: ${explorerUrl}`,
-              verification_timestamp: new Date().toISOString()
-            })
-            .eq('id', deployment.id);
+          // Contract is already verified - treat this as success
+          const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
           
-          console.log(`Contract ${deployment.contract_address} verified status refreshed in database.`);
-        }, 1000);
+          // Update the verification status with immediate write
+          await this.updateVerificationStatus(
+            deployment.id,
+            'verified',
+            `Contract is verified. View at: ${explorerUrl}`
+          );
+          
+          console.log(`Contract ${deployment.contract_address} recognized as already verified.`);
+          return;
+        } else if (response.data && response.data.status === '1') {
+          // Verification successful
+          const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
+          
+          // Update the verification status with immediate write
+          await this.updateVerificationStatus(
+            deployment.id,
+            'verified',
+            `Contract successfully verified. View at: ${explorerUrl}`
+          );
+          
+          console.log(`Contract ${deployment.contract_address} verified successfully.`);
+          return;
+        } else if (response.data && response.data.result === 'Pending in queue') {
+          // Still pending, check again after delay
+          console.log(`Verification ${guid} still pending, will check again in 10 seconds...`);
+          
+          // Update status to show current state
+          await this.updateVerificationStatus(
+            deployment.id,
+            'pending',
+            `Verification in progress (${guid})`
+          );
+          
+          // Check again after 10 seconds
+          setTimeout(() => {
+            this.checkVerificationStatus(deployment, guid, apiEndpoint, apiKey);
+          }, 10000);
+          
+          return;
+        } else {
+          // Verification failed
+          const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
+          const verifyUrl = `${explorerUrl.replace('#code', '')}/contract-verification`;
+          const errorMessage = response.data?.result || 'Unknown error';
+          
+          await this.updateVerificationStatus(
+            deployment.id,
+            'failed',
+            `Verification failed: ${errorMessage}. Try manually at ${verifyUrl}`
+          );
+          
+          return;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.log(`Verification status check failed, retries left: ${retries - 1}`, err);
         
-        console.log(`Contract ${deployment.contract_address} recognized as already verified.`);
-      } else {
-        // Verification failed
-        const errorMessage = response.data.result || 'Unknown error';
-        const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
+        // Log more detailed error info
+        if (err.code) {
+          console.log(`Error code: ${err.code}`);
+        }
+        if (err.response) {
+          console.log(`Response status: ${err.response.status}`);
+          console.log(`Response data:`, err.response.data);
+        }
         
-        await this.updateVerificationStatus(
-          deployment.id,
-          'failed',
-          `Verification failed: ${errorMessage}. Try manually at ${explorerUrl}`
-        );
+        retries--;
         
-        console.error(`Contract verification failed: ${errorMessage}`);
+        if (retries > 0) {
+          // Exponential backoff with longer delays
+          const delayMs = Math.pow(2, 5 - retries) * 3000; // 6s, 12s, 24s, 48s backoff
+          console.log(`Waiting ${delayMs/1000} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        } else {
+          // All retries failed, mark as failed
+          const explorerUrl = this.getExplorerUrl(deployment.chain_id, deployment.contract_address);
+          const verifyUrl = `${explorerUrl.replace('#code', '')}/contract-verification`;
+          const errorMessage = err.message || 'Connection error';
+          
+          await this.updateVerificationStatus(
+            deployment.id,
+            'failed',
+            `Verification status check failed: ${errorMessage}. Try manually at ${verifyUrl}`
+          );
+        }
       }
-    } catch (error: any) {
-      console.error('Error checking verification status:', error);
-      
-      const errorMessage = error.response?.data?.result || error.message || 'Unknown error';
-      const explorerUrl = this.getExplorerUrl(deployment.network, deployment.chain_id, deployment.contract_address);
-      
-      await this.updateVerificationStatus(
-        deployment.id,
-        'failed',
-        `Error checking verification status: ${errorMessage}. Try manually at ${explorerUrl}`
-      );
     }
   }
 

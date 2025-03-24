@@ -119,21 +119,21 @@ The application uses Supabase for database management. Here's the schema for the
 
 | Column | Type | Description |
 |--------|------|-------------|
-| id | uuid | Primary key (auto-generated) |
-| contract_address | text | Deployed contract address |
-| network | text | Network name (e.g., 'Ethereum Mainnet') |
-| chain_id | integer | Network chain ID |
+| id | uuid | Primary key for deployments |
+| contract_address | text | Contract address on blockchain |
+| chain_id | integer | Chain ID of the network |
 | deployer_address | text | Address that deployed the contract |
-| name | text | NFT collection name |
-| symbol | text | NFT collection symbol |
-| base_uri | text | IPFS base URI for NFT metadata |
+| name | text | Contract name |
+| symbol | text | Contract symbol |
+| base_uri | text | Base URI for NFT metadata |
 | deployment_tx_hash | text | Transaction hash of deployment |
-| deployment_timestamp | timestamp with time zone | When the contract was deployed |
-| verification_status | text | Status of contract verification (pending/verified/failed) |
-| verification_message | text | Message regarding verification process |
-| verification_timestamp | timestamp with time zone | When verification was last updated |
-| source_code | text | Contract source code for verification |
-| created_at | timestamp with time zone | Record creation timestamp |
+| deployment_timestamp | timestamptz | When contract was deployed |
+| verification_status | text | Status of verification (pending, success, failed) |
+| verification_message | text | Message about verification status |
+| verification_timestamp | timestamptz | When verification was completed |
+| constructor_args | text | Encoded constructor arguments for verification |
+| created_at | timestamptz | Record creation timestamp |
+| updated_at | timestamptz | Record update timestamp |
 
 ## Supabase Setup
 

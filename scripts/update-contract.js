@@ -47,7 +47,43 @@ try {
   exit(1);
 }
 
-// Step 2: Compile the contract with Hardhat
+// Step 2: Clear build-info directory to ensure clean compilation
+console.log('🧹 Clearing previous build artifacts...');
+try {
+  const artifactsDir = path.join(HARDHAT_DIR, 'artifacts');
+  if (fs.existsSync(artifactsDir)) {
+    // Function to recursively delete a directory
+    const deleteFolderRecursive = function(dirPath) {
+      if (fs.existsSync(dirPath)) {
+        fs.readdirSync(dirPath).forEach((file) => {
+          const curPath = path.join(dirPath, file);
+          if (fs.lstatSync(curPath).isDirectory()) {
+            // Recurse
+            deleteFolderRecursive(curPath);
+          } else {
+            // Delete file
+            fs.unlinkSync(curPath);
+          }
+        });
+        
+        // Don't delete the artifacts directory itself, just its contents
+        if (dirPath !== artifactsDir) {
+          fs.rmdirSync(dirPath);
+        }
+      }
+    };
+    
+    deleteFolderRecursive(artifactsDir);
+    console.log('✅ Previous build artifacts cleared!');
+  } else {
+    console.log('ℹ️ No previous build artifacts found.');
+  }
+} catch (error) {
+  console.error('⚠️ Warning: Could not clear build artifacts:', error.message);
+  // Continue with the process even if this step fails
+}
+
+// Step 3: Compile the contract with Hardhat
 console.log('🔨 Compiling contract with Hardhat...');
 try {
   process.chdir(HARDHAT_DIR);
@@ -59,7 +95,7 @@ try {
   exit(1);
 }
 
-// Step 3: Copy the artifacts to the src/contracts directory
+// Step 4: Copy the artifacts to the src/contracts directory
 console.log('📦 Copying artifacts to src/contracts...');
 try {
   const artifactPath = path.join(HARDHAT_DIR, 'artifacts', 'contracts', 'TBCNFT.sol', 'TBCNFT.json');
@@ -112,7 +148,7 @@ export type TBCNFT_ABI = typeof TBCNFT_ABI;
   exit(1);
 }
 
-// Step 4: Update verification source for easy access
+// Step 5: Update verification source for easy access
 console.log('📝 Updating verification source code...');
 try {
   const contractSource = fs.readFileSync(path.join(CONTRACTS_DIR, 'TBCNFT.sol'), 'utf8');

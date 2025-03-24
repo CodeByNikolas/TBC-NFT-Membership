@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { verificationService } from '@/lib/verification';
 import { supabaseAdmin } from '@/lib/supabase';
+import { verificationService } from '@/lib/verification';
+import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
+import { getAddressExplorerUrl } from '@/lib/networkUtils';
 
 export async function POST(request: Request) {
   try {
@@ -69,29 +71,18 @@ export async function GET(request: Request) {
       );
     }
     
-    // Determine explorer URL based on network
+    // Convert network name to proper format and determine explorer URL
     let explorerUrl = '';
-    switch(contract.network.toLowerCase()) {
-      case 'ethereum mainnet':
-        explorerUrl = `https://etherscan.io/address/${contract_address}`;
-        break;
-      case 'sepolia testnet':
-        explorerUrl = `https://sepolia.etherscan.io/address/${contract_address}`;
-        break;
-      case 'polygon mainnet':
-        explorerUrl = `https://polygonscan.com/address/${contract_address}`;
-        break;
-      case 'polygon amoy':
-        explorerUrl = `https://amoy.polygonscan.com/address/${contract_address}`;
-        break;
-      default:
-        // Fallback based on chain ID
-        if (contract.chain_id === 1) explorerUrl = `https://etherscan.io/address/${contract_address}`;
-        else if (contract.chain_id === 11155111) explorerUrl = `https://sepolia.etherscan.io/address/${contract_address}`;
-        else if (contract.chain_id === 137) explorerUrl = `https://polygonscan.com/address/${contract_address}`;
-        else if (contract.chain_id === 80002) explorerUrl = `https://amoy.polygonscan.com/address/${contract_address}`;
-        else explorerUrl = `https://etherscan.io/address/${contract_address}`;
-    }
+    
+    // Determine network name from chain_id directly
+    let networkName = '';
+    if (contract.chain_id === 1) networkName = 'mainnet';
+    else if (contract.chain_id === 11155111) networkName = 'sepolia';
+    else if (contract.chain_id === 137) networkName = 'polygon';
+    else if (contract.chain_id === 80002) networkName = 'amoy';
+    else networkName = 'mainnet'; // Default to mainnet
+    
+    explorerUrl = getAddressExplorerUrl(contract.contract_address, networkName);
     
     // Return the verification status
     return NextResponse.json({

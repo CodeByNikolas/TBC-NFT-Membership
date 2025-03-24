@@ -62,6 +62,7 @@ interface ContractData {
   verification_message?: string;
   verification_timestamp?: string;
   created_at: string | null;
+  chain_id: string;
 }
 
 interface NFTData {
@@ -429,7 +430,7 @@ function NFTEditingContent() {
             name={contract.name}
             symbol={contract.symbol}
             contractAddress={contract.contract_address}
-            network={contract.network}
+            chainId={parseInt(contract.chain_id)}
             baseUri={contract.base_uri}
             totalSupply={totalSupply}
             deployerAddress={contract.deployer_address}

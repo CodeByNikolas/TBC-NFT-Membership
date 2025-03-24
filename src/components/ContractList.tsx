@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Loader2, Edit } from 'lucide-react';
 import api from '@/lib/api';
+import { getNetworkDisplayName, getAddressExplorerUrl, getTxExplorerUrl } from '@/lib/networkUtils';
 
 interface ContractDeployment {
   id: string;
   contract_address: string;
-  network: string;
+  chain_id: number;
+  network?: string;
   deployer_address: string;
   name: string;
   symbol: string;
@@ -211,28 +213,14 @@ export function ContractList() {
     }
   }, [contracts]);
 
-  // Helper function to get the current network name
-  const getNetworkName = (chainId: number): string => {
-    switch (chainId) {
-      case 1: return 'Ethereum Mainnet';
-      case 11155111: return 'Sepolia Testnet';
-      case 137: return 'Polygon Mainnet';
-      case 80002: return 'Polygon Amoy';
-      default: return 'Unknown Network';
-    }
-  };
-
   // Effect to filter contracts based on network toggle
   useEffect(() => {
     if (showAllNetworks) {
       setFilteredContracts(contracts);
     } else {
-      // Filter to only show contracts from the current network
-      const currentNetwork = getNetworkName(chainId);
+      // Filter to only show contracts from the current network using chain_id
       setFilteredContracts(
-        contracts.filter(contract => 
-          currentNetwork.toLowerCase() === contract.network.toLowerCase()
-        )
+        contracts.filter(contract => contract.chain_id === chainId)
       );
     }
   }, [contracts, showAllNetworks, chainId]);
@@ -319,56 +307,65 @@ export function ContractList() {
     }
   };
 
-  const getBlockExplorerUrl = (network: string, contractAddress: string, isTx = false) => {
-    const addressPath = isTx ? 'tx' : 'address';
+  const getBlockExplorerUrl = (chainId: number, contractAddress: string, isTx = false) => {
+    // Get network name from chain ID
+    let networkName = '';
     
-    switch (network.toLowerCase()) {
-      case 'ethereum mainnet':
-        return `https://etherscan.io/${addressPath}/${contractAddress}`;
-      case 'sepolia testnet':
-        return `https://sepolia.etherscan.io/${addressPath}/${contractAddress}`;
-      case 'polygon mainnet':
-        return `https://polygonscan.com/${addressPath}/${contractAddress}`;
-      case 'polygon amoy':
-        return `https://amoy.polygonscan.com/${addressPath}/${contractAddress}`;
-      default:
-        // For unknown networks, try to make an educated guess based on network name
-        const networkName = network.toLowerCase();
-        if (networkName.includes('ethereum')) {
-          return `https://etherscan.io/${addressPath}/${contractAddress}`;
-        } else if (networkName.includes('polygon')) {
-          return `https://polygonscan.com/${addressPath}/${contractAddress}`;
-        }
-        return '#';
+    switch (chainId) {
+      case 1:
+        networkName = 'mainnet';
+        break;
+      case 11155111:
+        networkName = 'sepolia';
+        break;
+      case 137:
+        networkName = 'polygon';
+        break;
+      case 80002:
+        networkName = 'amoy';
+        break;
     }
+    
+    if (isTx) {
+      return getTxExplorerUrl(contractAddress, networkName);
+    }
+    
+    return getAddressExplorerUrl(contractAddress, networkName);
   };
 
-  const handleVerifyContract = async (contractAddress: string) => {
+  const handleVerifyContract = async (contractId: string) => {
     try {
+      // Find the contract in our local state
+      const contract = filteredContracts.find(c => c.id === contractId);
+      if (!contract) {
+        console.error(`Contract with ID ${contractId} not found`);
+        return;
+      }
+
       // Set verifying state for this contract
-      setVerifyingContracts(prev => ({ ...prev, [contractAddress]: true }));
+      setVerifyingContracts(prev => ({ ...prev, [contractId]: true }));
       
-      console.log(`Initiating verification for contract: ${contractAddress}`);
+      console.log(`Initiating verification for contract: ${contract.contract_address}`);
       
-      // Call the verification API
+      // Call the verification API with contract_address
       const response = await api.post('/api/contracts/verify', {
-        contract_address: contractAddress
+        contract_address: contract.contract_address
       });
       
       console.log(`Verification API response:`, response.data);
       
       // Update contract status to pending to show immediate feedback
       setContracts(prev => {
-        const updated = prev.map(contract => {
-          if (contract.contract_address === contractAddress) {
+        const updated = prev.map(c => {
+          if (c.id === contractId) {
             return {
-              ...contract,
+              ...c,
               verification_status: 'pending' as const,
               verification_message: 'Verification in progress...',
               verification_timestamp: new Date().toISOString()
             };
           }
-          return contract;
+          return c;
         });
         
         // Make sure polling is active since we now have at least one pending contract
@@ -387,15 +384,15 @@ export function ContractList() {
       
       // Clear verifying state and set cooldown
       setTimeout(() => {
-        setVerifyingContracts(prev => ({ ...prev, [contractAddress]: false }));
-        setCooldowns(prev => ({ ...prev, [contractAddress]: 60 }));
+        setVerifyingContracts(prev => ({ ...prev, [contractId]: false }));
+        setCooldowns(prev => ({ ...prev, [contractId]: 60 }));
       }, 2000);
     } catch (error) {
       console.error('Error verifying contract:', error);
-      setVerifyingContracts(prev => ({ ...prev, [contractAddress]: false }));
+      setVerifyingContracts(prev => ({ ...prev, [contractId]: false }));
       
       // Set a 60 second cooldown even on error
-      setCooldowns(prev => ({ ...prev, [contractAddress]: 60 }));
+      setCooldowns(prev => ({ ...prev, [contractId]: 60 }));
       
       // Still reload contracts to get updated status
       setTimeout(() => loadContracts(page), 2000);
@@ -443,6 +440,22 @@ export function ContractList() {
     
     if (secondsRemaining <= 0) return "Verification in progress";
     return `Verification scheduled (${secondsRemaining}s)`;
+  };
+
+  // Helper function to convert chain ID to network name
+  const getNetworkNameForChainId = (chainId: number): string => {
+    switch (chainId) {
+      case 1:
+        return 'mainnet';
+      case 11155111:
+        return 'sepolia';
+      case 137:
+        return 'polygon';
+      case 80002:
+        return 'amoy';
+      default:
+        return 'unknown';
+    }
   };
 
   if (!address) {
@@ -527,7 +540,7 @@ export function ContractList() {
                 <p className="text-sm">
                   <span className="font-medium">Address:</span>{' '}
                   <a
-                    href={getBlockExplorerUrl(contract.network, contract.contract_address)}
+                    href={getBlockExplorerUrl(contract.chain_id, contract.contract_address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-mono text-blue-500 hover:underline"
@@ -535,13 +548,13 @@ export function ContractList() {
                     {contract.contract_address}
                   </a>
                 </p>
-                <p className="text-sm">
-                  <span className="font-medium">Network:</span> {contract.network}
-                </p>
+                <div className="text-sm mb-2">
+                  <span className="font-medium">Network:</span> {getNetworkDisplayName(getNetworkNameForChainId(contract.chain_id))}
+                </div>
                 <p className="text-sm">
                   <span className="font-medium">Deployment:</span>{' '}
                   <a
-                    href={getBlockExplorerUrl(contract.network, contract.deployment_tx_hash, true)}
+                    href={getBlockExplorerUrl(contract.chain_id, contract.deployment_tx_hash, true)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500 hover:underline"

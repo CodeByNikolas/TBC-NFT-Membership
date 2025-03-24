@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider"
 import { formatUnits } from 'viem'
 import Link from 'next/link'
 import React from 'react'
+import { getAddressExplorerUrl, getTxExplorerUrl, getNetworkDisplayName } from '@/lib/networkUtils'
 
 interface FormData {
   name: string
@@ -355,7 +356,7 @@ export function ContractDeploymentForm() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Transaction in progress... Please wait for confirmation. 
               <a 
-                href={`${getBlockExplorerUrl(chainId)}/tx/${txHash}`}
+                href={getTxExplorerUrl(txHash, getNetworkNameForUtils(chainId))}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 text-blue-600 hover:underline"
@@ -368,7 +369,7 @@ export function ContractDeploymentForm() {
 
         <Button
           type="submit"
-          disabled={isDeploying || isConfirming || !feeData?.maxFeePerGas || txInProgress}
+          disabled={isDeploying || isConfirming || !feeData?.maxFeePerGas || txInProgress || isEstimatingGas || !estimatedGas}
           className="w-full"
         >
           {isDeploying || isConfirming || txInProgress ? (
@@ -378,8 +379,11 @@ export function ContractDeploymentForm() {
                txInProgress ? 'Transaction in progress...' : 
                'Confirming...'}
             </>
-          ) : !feeData?.maxFeePerGas ? (
-            'Loading Gas Data...'
+          ) : !feeData?.maxFeePerGas || isEstimatingGas || !estimatedGas ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {isEstimatingGas ? 'Estimating gas...' : 'Loading Gas Data...'}
+            </>
           ) : (
             'Deploy Contract'
           )}
@@ -389,17 +393,18 @@ export function ContractDeploymentForm() {
   )
 }
 
-function getBlockExplorerUrl(chainId: number): string {
+// Helper function to map chainId to network name for utils
+function getNetworkNameForUtils(chainId: number): string {
   switch (chainId) {
     case 1:
-      return 'https://etherscan.io'
+      return 'mainnet';
     case 11155111:
-      return 'https://sepolia.etherscan.io'
+      return 'sepolia';
     case 137:
-      return 'https://polygonscan.com'
+      return 'polygon';
     case 80002:
-      return 'https://amoy.polygonscan.com'
+      return 'amoy';
     default:
-      return ''
+      return '';
   }
 }

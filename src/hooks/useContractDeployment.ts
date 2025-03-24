@@ -5,6 +5,7 @@ import { parseEther, formatUnits, encodeAbiParameters } from 'viem'
 import contractData from '@/contracts/TBCNFT.json'
 import api from '@/lib/api'
 import React from 'react'
+import { getNetworkNameFromChainId, getDisplayNameFromChainId, getInfuraRpcUrl } from '@/lib/networkUtils'
 
 interface DeployContractResult {
   address: string
@@ -133,9 +134,15 @@ export function useContractDeployment(): ContractDeploymentHook {
       }
 
       // Fallback to manual RPC call if publicClient isn't available or fails
-      const rpcUrl = getRpcUrl(chainId);
+      const rpcUrl = getInfuraRpcUrl(chainId);
       if (!rpcUrl) {
-        throw new Error('No RPC URL available for this network');
+        console.log('No Infura API key provided, and wallet provider failed. Using fallback gas estimates.');
+        // Return fallback estimates since we can't make the RPC call
+        if (chainId === 137 || chainId === 80002) {
+          return BigInt(375000); // Polygon networks typically use less gas
+        } else {
+          return BigInt(450000); // Ethereum and other chains
+        }
       }
       
       // Estimate gas through RPC with timeout protection
@@ -241,9 +248,14 @@ export function useContractDeployment(): ContractDeploymentHook {
             }
           }
           
-          // Fallback to manual RPC call
-          const rpcUrl = getRpcUrl(chainId);
-          if (!rpcUrl) return;
+          // Fallback to Infura RPC if available
+          const rpcUrl = getInfuraRpcUrl(chainId);
+          if (!rpcUrl) {
+            console.warn('No Infura API key provided, and wallet provider failed. Retrying later...');
+            // Continue polling even without an RPC endpoint, as the wallet provider might work next time
+            timeoutId = setTimeout(checkTransaction, 5000);
+            return;
+          }
           
           // Make a direct JSON-RPC call to check transaction receipt
           const response = await fetch(rpcUrl, {
@@ -310,9 +322,8 @@ export function useContractDeployment(): ContractDeploymentHook {
           setRecordedInSupabase(true);
           
           // Record deployment in Supabase with all required fields
-          await api.post('/contracts/deployments', {
+          await api.post('/api/contracts/deployments', {
             contract_address: confirmedContractAddress,
-            network: getNetworkName(chainId),
             chain_id: chainId,
             deployer_address: address,
             name: deploymentData.name,
@@ -322,15 +333,16 @@ export function useContractDeployment(): ContractDeploymentHook {
             // The timestamp fields will be handled server-side by Supabase
             // deployment_timestamp is set on the server
             verification_status: 'pending',
-            verification_message: 'Awaiting verification',
+            verification_message: 'Awaiting verification'
             // verification_timestamp will be set on verification update
-            source_code: contractData.sourceCode
           })
           .then(() => {
             console.log('Deployment recorded successfully in Supabase')
           })
           .catch(error => {
             console.error('Error recording deployment in Supabase:', error)
+            console.error('Response data:', error.response?.data)
+            console.error('Response status:', error.response?.status)
             setRecordedInSupabase(false); // Allow retry if it failed
           })
         } catch (error) {
@@ -577,36 +589,4 @@ export function useContractDeployment(): ContractDeploymentHook {
     feeData,
     estimatedGas
   };
-}
-
-// Helper function to get RPC URL for the current chain - ONLY used as fallback now
-function getRpcUrl(chainId: number): string | null {
-  // Use public RPCs as fallbacks
-  switch (chainId) {
-    case 1:
-      return 'https://eth.llamarpc.com';
-    case 11155111:
-      return 'https://rpc.sepolia.org';
-    case 137:
-      return 'https://polygon-rpc.com';
-    case 80002:
-      return 'https://rpc-amoy.polygon.technology';
-    default:
-      return null;
-  }
-}
-
-function getNetworkName(chainId: number): string {
-  switch (chainId) {
-    case 1:
-      return 'Ethereum Mainnet';
-    case 11155111:
-      return 'Sepolia Testnet';
-    case 137:
-      return 'Polygon Mainnet';
-    case 80002:
-      return 'Polygon Amoy';
-    default:
-      return 'Unknown Network';
-  }
 }

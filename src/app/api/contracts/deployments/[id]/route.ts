@@ -4,10 +4,12 @@ import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    // Await the params object before accessing its properties
+    const params = await context.params;
+    const id = params.id;
     
     if (!id) {
       return errorResponseNoCache('Contract ID is required', 400);
