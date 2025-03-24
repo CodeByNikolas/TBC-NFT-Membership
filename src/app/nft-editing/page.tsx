@@ -283,6 +283,7 @@ function NFTEditingContent() {
         
         try {
           // Try multiple approaches to check for totalSupply
+          let totalSupplyFound = false;
           
           // Approach 1: Try to directly read the totalSupply (may fail with some errors)
           try {
@@ -295,9 +296,11 @@ function NFTEditingContent() {
             setTotalSupply(Number(data));
             const count = Math.min(Number(data), 12);
             generateNFTs(count, contractData);
+            totalSupplyFound = true;
             return; // If successful, exit early
           } catch (err) {
-            console.warn("Direct totalSupply read failed, trying alternative approaches");
+            // Silently handle this error - we'll try other approaches
+            // Don't log the warning as it's expected for many contracts
           }
           
           // Approach 2: Check if the contract supports ERC721Enumerable via ERC165
@@ -320,12 +323,12 @@ function NFTEditingContent() {
               setTotalSupply(Number(data));
               const count = Math.min(Number(data), 12);
               generateNFTs(count, contractData);
+              totalSupplyFound = true;
               return; // If successful, exit early
-            } else {
-              console.warn("Contract does not support ERC721Enumerable extension");
             }
           } catch (err) {
-            console.warn("ERC165 interface check failed", err);
+            // Silently handle this error - not all contracts support ERC165
+            // Don't log the warning as it's expected for many contracts
           }
           
           // Approach 3: Try to use estimateGas to check if the function exists
@@ -347,24 +350,24 @@ function NFTEditingContent() {
             setTotalSupply(Number(data));
             const count = Math.min(Number(data), 12);
             generateNFTs(count, contractData);
+            totalSupplyFound = true;
             return; // If successful, exit early
           } catch (err) {
-            console.warn("Contract does not support totalSupply via estimateGas", err);
+            // Silently handle this error - not all contracts have totalSupply
+            // Don't log the warning as it's expected for many contracts
           }
           
           // If we reach here, none of the approaches worked - use placeholders
-          if (!hasUsedPlaceholder) {
-            console.log("Using placeholder NFT data");
+          if (!totalSupplyFound) {
+            // Use a quieter console info instead of a warning or error
+            console.info("Contract does not implement standard totalSupply, using placeholder NFTs");
             setTotalSupply(placeholderCount);
             generateNFTs(placeholderCount, contractData);
-            hasUsedPlaceholder = true;
           }
         } catch (err) {
-          console.error("Error fetching blockchain data:", err);
-          if (!hasUsedPlaceholder) {
-            setTotalSupply(placeholderCount);
-            generateNFTs(placeholderCount, contractData);
-          }
+          console.error("General error fetching blockchain data:", err);
+          setTotalSupply(placeholderCount);
+          generateNFTs(placeholderCount, contractData);
         }
       }
     } catch (err: any) {

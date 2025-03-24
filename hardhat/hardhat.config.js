@@ -15,11 +15,11 @@ module.exports = {
   networks: {
     // Ethereum Networks
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/",
+      url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org", // "https://sepolia.infura.io/v3/",
       accounts: [], // We'll use the connected wallet in the browser
     },
     mainnet: {
-      url: process.env.MAINNET_RPC_URL || "https://mainnet.infura.io/v3/",
+      url: process.env.MAINNET_RPC_URL || "https://eth.llamarpc.com", // "https://mainnet.infura.io/v3/",
       accounts: [], // We'll use the connected wallet in the browser
     },
     // Polygon Networks
