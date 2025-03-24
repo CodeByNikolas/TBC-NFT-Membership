@@ -1,13 +1,11 @@
-import { BookText, Network, Image, Wallet } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
-interface ContractDetailsProps {
+interface ContractDetailsBannerProps {
   name: string;
   symbol: string;
   contractAddress: string;
   network: string;
-  baseUri: string;
+  baseUri?: string;
   totalSupply: number;
   deployerAddress: string;
 }
@@ -19,76 +17,40 @@ export function ContractDetailsBanner({
   network,
   baseUri,
   totalSupply,
-  deployerAddress
-}: ContractDetailsProps) {
-  // Helper to abbreviate addresses
-  const shortenAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
-
-  // Determine network color
-  const getNetworkColor = (network: string): string => {
-    const networkLower = network.toLowerCase();
-    if (networkLower.includes('ethereum')) return 'bg-blue-100 text-blue-800';
-    if (networkLower.includes('polygon')) return 'bg-purple-100 text-purple-800';
-    if (networkLower.includes('sepolia')) return 'bg-gray-100 text-gray-800';
-    if (networkLower.includes('amoy')) return 'bg-purple-100 text-purple-700';
-    return 'bg-gray-100 text-gray-800';
-  };
-
+  deployerAddress,
+}: ContractDetailsBannerProps) {
   return (
-    <Card className="bg-gradient-to-r from-gray-50 to-white shadow-md overflow-hidden">
+    <Card className="border border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 overflow-hidden">
       <CardContent className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
-          <div className="flex items-center mb-4 md:mb-0">
-            <BookText className="h-8 w-8 text-blue-600 mr-3" />
-            <div>
-              <h1 className="text-2xl font-bold truncate max-w-md">{name}</h1>
-              <Badge variant="outline" className="mt-1">{symbol}</Badge>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
+              <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full font-medium">{symbol}</span>
             </div>
-          </div>
-          <Badge className={`${getNetworkColor(network)} px-3 py-1 md:ml-3`}>
-            {network}
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div className="flex items-start space-x-2">
-            <div className="mt-0.5">
-              <Network className="h-4 w-4 text-gray-500" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">Contract Address</p>
-              <p className="font-mono text-gray-600 truncate max-w-[180px]" title={contractAddress}>
-                {shortenAddress(contractAddress)}
+            <div className="space-y-1 mb-4 md:mb-0">
+              <p className="text-sm text-gray-500 flex items-center">
+                <span className="font-medium text-gray-700 mr-2">Contract:</span>
+                <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{contractAddress}</code>
+              </p>
+              <p className="text-sm text-gray-500 flex items-center">
+                <span className="font-medium text-gray-700 mr-2">Network:</span>
+                <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">{network}</span>
+              </p>
+              <p className="text-sm text-gray-500 flex items-center">
+                <span className="font-medium text-gray-700 mr-2">Base URI:</span>
+                <code className="bg-gray-100 px-2 py-0.5 rounded text-xs truncate max-w-xs">{baseUri || 'Not set'}</code>
+              </p>
+              <p className="text-sm text-gray-500 flex items-center">
+                <span className="font-medium text-gray-700 mr-2">Deployer:</span>
+                <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{deployerAddress}</code>
               </p>
             </div>
           </div>
-
-          <div className="flex items-start space-x-2">
-            <div className="mt-0.5">
-              <Image className="h-4 w-4 text-gray-500" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">Base URI</p>
-              <p className="font-mono text-gray-600 truncate max-w-[180px]" title={baseUri || 'Not set'}>
-                {baseUri || 'Not set'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start space-x-2">
-            <div className="mt-0.5">
-              <Wallet className="h-4 w-4 text-gray-500" />
-            </div>
-            <div>
-              <div className="flex items-center">
-                <p className="font-medium text-gray-700 mr-2">Owner</p>
-                <Badge variant="outline" className="px-2 py-0">{totalSupply} NFTs</Badge>
-              </div>
-              <p className="font-mono text-gray-600 truncate max-w-[180px]" title={deployerAddress}>
-                {shortenAddress(deployerAddress)}
-              </p>
+          <div className="flex flex-col items-start md:items-end">
+            <div className="bg-primary/10 rounded-lg p-4 flex flex-col items-center">
+              <span className="text-sm text-gray-500">Total Supply</span>
+              <span className="text-3xl font-bold text-primary">{totalSupply}</span>
             </div>
           </div>
         </div>
