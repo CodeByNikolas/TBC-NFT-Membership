@@ -103,6 +103,14 @@ contract TBCNFT is ERC721URIStorage, Ownable {
     }
 
     /**
+     * @dev Public getter for the base URI
+     * @return The current base URI string
+     */
+    function getBaseURI() public view returns (string memory) {
+        return _TBCbaseURI;
+    }
+
+    /**
      * @dev Updates the base URI for all tokens
      * @param uri New base URI to set
      * @notice This will affect all tokens that don't have a specific tokenURI set
