@@ -88,10 +88,7 @@ export async function POST(request: Request) {
         transaction_hash: receipt?.hash,
         deployment_timestamp: new Date().toISOString(),
         verification_status: 'pending',
-        verification_message: 'Verification will be attempted soon',
-        name: contractName,
-        symbol: contractSymbol,
-        base_uri: contractBaseURI
+        verification_message: 'Verification will be attempted soon'
       })
       .select()
       .single();

@@ -26,8 +26,6 @@ const handlers = {
           'contract_address', 
           'chain_id', 
           'deployer_address', 
-          'name', 
-          'symbol', 
           'deployment_tx_hash'
         ];
         

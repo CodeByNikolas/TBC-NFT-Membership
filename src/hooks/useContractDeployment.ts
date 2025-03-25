@@ -326,9 +326,6 @@ export function useContractDeployment(): ContractDeploymentHook {
             contract_address: confirmedContractAddress,
             chain_id: chainId,
             deployer_address: address,
-            name: deploymentData.name,
-            symbol: deploymentData.symbol,
-            base_uri: deploymentData.baseURI,
             deployment_tx_hash: hash,
             // The timestamp fields will be handled server-side by Supabase
             // deployment_timestamp is set on the server
