@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseUtils';
 import { verificationService } from '@/lib/verification';
-import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
-import { getAddressExplorerUrl } from '@/lib/networkUtils';
+import { jsonResponseNoCache, errorResponseNoCache, HttpErrorStatus } from '../../../../lib/ServerApiUtils';
+import { getAddressExplorerUrl } from '@/lib/ethersUtil';
 
 export async function POST(request: Request) {
   try {
     const { contract_address } = await request.json();
     
     if (!contract_address) {
-      return NextResponse.json({ error: 'Contract address is required' }, { status: 400 });
+      return errorResponseNoCache('Contract address is required', 400);
     }
     
     // Find the deployment by contract address
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     
     if (error || !deployment) {
       console.error('Error finding deployment:', error);
-      return NextResponse.json({ error: 'Deployment not found' }, { status: 404 });
+      return errorResponseNoCache('Deployment not found', 404);
     }
     
     console.log(`Manual verification requested for ${contract_address}`);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     // Use the verifyDeploymentById method which has bypass_delay flag
     await verificationService.verifyDeploymentById(deployment.id);
     
-    return NextResponse.json({
+    return jsonResponseNoCache({
       success: true,
       message: 'Verification started',
       contract_address,
@@ -37,9 +37,9 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error('Error starting verification:', error);
-    return NextResponse.json(
-      { error: error.message || 'An error occurred' },
-      { status: 500 }
+    return errorResponseNoCache(
+      error.message || 'An error occurred',
+      500
     );
   }
 }
@@ -51,10 +51,7 @@ export async function GET(request: Request) {
     const contract_address = searchParams.get('contract_address');
     
     if (!contract_address) {
-      return NextResponse.json(
-        { error: 'Contract address is required' },
-        { status: 400 }
-      );
+      return errorResponseNoCache('Contract address is required', 400);
     }
     
     // Find the contract in Supabase
@@ -65,10 +62,7 @@ export async function GET(request: Request) {
       .single();
     
     if (error) {
-      return NextResponse.json(
-        { error: 'Contract not found' },
-        { status: 404 }
-      );
+      return errorResponseNoCache('Contract not found', 404);
     }
     
     // Convert network name to proper format and determine explorer URL
@@ -85,7 +79,7 @@ export async function GET(request: Request) {
     explorerUrl = getAddressExplorerUrl(contract.contract_address, networkName);
     
     // Return the verification status
-    return NextResponse.json({
+    return jsonResponseNoCache({
       contract_address,
       verification_status: contract.verification_status,
       verification_message: contract.verification_message,
@@ -94,9 +88,6 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error('Error checking verification status:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return errorResponseNoCache(error.message, 500);
   }
 } 

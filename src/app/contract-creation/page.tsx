@@ -1,6 +1,6 @@
 'use client';
 
-import { ContractDeploymentForm } from '@/components/ContractDeploymentForm'
+import { ContractDeploymentForm } from './components/ContractDeploymentForm'
 
 export default function ContractCreationPage() {
   return (

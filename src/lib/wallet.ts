@@ -1,25 +1,23 @@
 import { ethers } from 'ethers';
 
 /**
- * Gets a wallet instance for contract deployment
- * This should be configured with environment variables in production
+ * Gets a wallet for server-side operations
+ * This uses the private key from environment variables
  */
-export async function getWallet() {
-  // For development, use a simple wallet with private key from env
-  // In production, this should be properly secured
+export async function getWallet(): Promise<ethers.BrowserProvider> {
+  // For security, we should use environment variables for the private key
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   
   if (!privateKey) {
-    console.error('No deployer private key found in environment variables');
-    return null;
+    throw new Error('No deployer private key found in environment variables');
   }
-  
+
   try {
-    return new ethers.Wallet(privateKey);
+    // Create a wallet from the private key
+    const wallet = new ethers.Wallet(privateKey);
+    return wallet.provider as ethers.BrowserProvider;
   } catch (error) {
     console.error('Error creating wallet:', error);
-    return null;
+    throw new Error('Failed to initialize wallet');
   }
-}
-
-export default { getWallet }; 
+} 

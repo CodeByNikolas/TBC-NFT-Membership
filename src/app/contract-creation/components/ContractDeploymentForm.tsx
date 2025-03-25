@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider"
 import { formatUnits } from 'viem'
 import Link from 'next/link'
 import React from 'react'
-import { getAddressExplorerUrl, getTxExplorerUrl, getNetworkDisplayName } from '@/lib/networkUtils'
+import ethersUtils from '@/lib/ethersUtil'
 
 interface FormData {
   name: string
@@ -356,7 +356,7 @@ export function ContractDeploymentForm() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Transaction in progress... Please wait for confirmation. 
               <a 
-                href={getTxExplorerUrl(txHash, getNetworkNameForUtils(chainId))}
+                href={ethersUtils.getTxExplorerUrl(txHash, chainId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 text-blue-600 hover:underline"
@@ -391,20 +391,4 @@ export function ContractDeploymentForm() {
       </form>
     </div>
   )
-}
-
-// Helper function to map chainId to network name for utils
-function getNetworkNameForUtils(chainId: number): string {
-  switch (chainId) {
-    case 1:
-      return 'mainnet';
-    case 11155111:
-      return 'sepolia';
-    case 137:
-      return 'polygon';
-    case 80002:
-      return 'amoy';
-    default:
-      return '';
-  }
 }

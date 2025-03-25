@@ -1,8 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import Link from "next/link";
-import { getNetworkDisplayName, getAddressExplorerUrl, getIpfsGatewayUrl } from "@/lib/networkUtils";
 import { ExternalLink } from "lucide-react";
-
+import ethersUtils from "@/lib/ethersUtil";
 interface ContractDetailsBannerProps {
   name: string;
   symbol: string;
@@ -22,18 +20,16 @@ export function ContractDetailsBanner({
   totalSupply,
   deployerAddress,
 }: ContractDetailsBannerProps) {
-  // Get network name from chain ID
-  const networkName = getNetworkNameFromChainId(chainId);
   
   // Get formatted network name
-  const networkDisplayName = getNetworkDisplayName(networkName);
+  const networkDisplayName = ethersUtils.getDisplayNameFromChainId(chainId);
   
   // Get explorer URLs
-  const contractExplorerUrl = getAddressExplorerUrl(contractAddress, networkName);
-  const deployerExplorerUrl = getAddressExplorerUrl(deployerAddress, networkName);
+  const contractExplorerUrl = ethersUtils.getAddressExplorerUrl(contractAddress, chainId);
+  const deployerExplorerUrl = ethersUtils.getAddressExplorerUrl(deployerAddress, chainId);
   
   // Get IPFS gateway URL if baseUri is using IPFS
-  const ipfsGatewayUrl = baseUri ? getIpfsGatewayUrl(baseUri) : '';
+  const ipfsGatewayUrl = baseUri ? ethersUtils.getIpfsGatewayUrl(baseUri) : '';
   
   // Format address for display (truncate)
   const formatAddress = (address: string) => {
@@ -41,21 +37,6 @@ export function ContractDetailsBanner({
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
-  // Helper function to convert chain ID to network name
-  function getNetworkNameFromChainId(chainId: number): string {
-    switch (chainId) {
-      case 1:
-        return 'mainnet';
-      case 11155111:
-        return 'sepolia';
-      case 137:
-        return 'polygon';
-      case 80002:
-        return 'amoy';
-      default:
-        return 'unknown';
-    }
-  }
 
   return (
     <Card className="border border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 overflow-hidden">

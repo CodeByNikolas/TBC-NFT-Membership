@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseUtils';
 import { getWallet } from '@/lib/wallet';
 import { ethers } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { TBCNFT__factory } from '@/hardhat/typechain-types';
-import { getProvider } from '@/lib/ethers';
+import { getProvider } from '@/lib/ethersUtil';
 import { verificationService } from '@/lib/verification';
 
 export async function POST(request: Request) {

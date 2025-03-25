@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verificationService } from '@/lib/verification';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseUtils';
 
 export async function POST(request: Request) {
   try {

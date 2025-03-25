@@ -1,11 +1,11 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAccount, usePublicClient } from 'wagmi';
 import { parseAbi } from 'viem';
-import api from '@/lib/api';
+import { api } from '@/lib/ClientApiUtils';
 
 // Shadcn components
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,10 @@ import {
 import { Loader2, LayoutGrid, List, SlidersHorizontal, Plus } from 'lucide-react';
 
 // Custom components
-import { ContractDetailsBanner } from '@/components/ContractDetailsBanner';
+import { ContractDetailsBanner } from './components/ContractDetailsBanner';
+import { NFTCard } from './components/NFTCard';
+import { AddNFTCard } from './components/AddNFTCard';
+import { NFTListView } from './components/NFTListView';
 
 // ERC721 ABI with totalSupply function
 const erc721ABI = parseAbi([
@@ -122,122 +125,6 @@ function ErrorState({ error }: { error: string }) {
   );
 }
 
-// NFT List View component
-function NFTListView({ nfts, onEdit, onView, onAdd }: { 
-  nfts: NFTData[],
-  onEdit: (id: number) => void,
-  onView: (id: number) => void,
-  onAdd: () => void
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-12 py-3 px-4 font-medium text-sm text-gray-500 border-b">
-        <div className="col-span-1">ID</div>
-        <div className="col-span-1">Image</div>
-        <div className="col-span-4">Name</div>
-        <div className="col-span-4">Description</div>
-        <div className="col-span-2">Actions</div>
-      </div>
-      
-      {nfts.map((nft) => (
-        <div key={nft.id} className="grid grid-cols-12 py-3 px-4 items-center bg-white border rounded-md shadow-sm hover:shadow-md transition-shadow">
-          <div className="col-span-1 font-mono text-sm">{nft.id}</div>
-          <div className="col-span-1">
-            <img 
-              src={nft.image} 
-              alt={nft.name} 
-              className="w-10 h-10 rounded-md object-cover"
-            />
-          </div>
-          <div className="col-span-4 font-medium truncate">{nft.name}</div>
-          <div className="col-span-4 text-sm text-gray-500 truncate">{nft.description || '-'}</div>
-          <div className="col-span-2 flex space-x-2">
-            <Button size="sm" variant="outline" onClick={() => onEdit(nft.id)}>
-              Edit
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => onView(nft.id)}>
-              View
-            </Button>
-          </div>
-        </div>
-      ))}
-      
-      <Button 
-        className="w-full py-6 border-dashed border-2 shadow-none hover:shadow-sm bg-transparent text-gray-500 hover:bg-gray-50"
-        variant="outline"
-        onClick={onAdd}
-      >
-        <Plus className="mr-2 h-4 w-4" />
-        Add New NFT
-      </Button>
-    </div>
-  );
-}
-
-// NFT Card component with enhanced styling
-function NFTCard({ id, name, image, description, onEdit, onView }: {
-  id: number;
-  name: string;
-  image: string;
-  description?: string;
-  onEdit: (id: number) => void;
-  onView: (id: number) => void;
-}) {
-  return (
-    <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg border border-gray-100">
-      <div className="aspect-square overflow-hidden bg-gray-100">
-        <img 
-          src={image} 
-          alt={name} 
-          className="w-full h-full object-cover transition-transform hover:scale-105" 
-        />
-      </div>
-      <CardContent className="p-4">
-        <h3 className="font-semibold truncate">{name}</h3>
-        {description && (
-          <p className="text-sm text-gray-500 truncate mt-1">{description}</p>
-        )}
-        <div className="flex justify-between mt-4">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex-1 mr-1"
-            onClick={() => onEdit(id)}
-          >
-            Edit
-          </Button>
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            className="flex-1 ml-1"
-            onClick={() => onView(id)}
-          >
-            View
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Enhanced Add NFT Card component
-function AddNFTCard({ onClick }: { onClick: () => void }) {
-  return (
-    <Card 
-      className="overflow-hidden transition-all duration-300 hover:shadow-lg border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 cursor-pointer h-full"
-      onClick={onClick}
-    >
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-        <div className="rounded-full bg-primary/10 p-4 mb-4">
-          <Plus className="h-8 w-8 text-primary" />
-        </div>
-        <h3 className="font-semibold text-gray-700">Add New NFT</h3>
-        <p className="text-sm text-gray-500 mt-2">Upload and mint a new token</p>
-      </div>
-    </Card>
-  );
-}
-
 // The main content component - now using useSearchParams properly within a client component
 // that is wrapped in Suspense
 function NFTEditingContent() {
@@ -255,13 +142,7 @@ function NFTEditingContent() {
   const { address } = useAccount();
   const publicClient = usePublicClient();
 
-  useEffect(() => {
-    if (contractId) {
-      fetchContractDetails();
-    }
-  }, [contractId]);
-
-  const fetchContractDetails = async () => {
+  const fetchContractDetails = useCallback(async () => {
     if (!contractId) return;
     
     setLoading(true);
@@ -280,7 +161,7 @@ function NFTEditingContent() {
       if (contractData.contract_address && publicClient) {
         // Default placeholder count for NFTs if we can't get it from the blockchain
         const placeholderCount = 6;
-        let hasUsedPlaceholder = false;
+        const hasUsedPlaceholder = false;
         
         try {
           // Try multiple approaches to check for totalSupply
@@ -377,8 +258,14 @@ function NFTEditingContent() {
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [contractId, publicClient, address]);
+
+  useEffect(() => {
+    if (contractId) {
+      fetchContractDetails();
+    }
+  }, [contractId, fetchContractDetails]);
+
   // Helper function to generate NFT data 
   const generateNFTs = (count: number, contractData: ContractData) => {
     const nftData: NFTData[] = [];

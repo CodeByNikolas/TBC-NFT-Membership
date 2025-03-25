@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseUtils';
 import { verificationService } from '@/lib/verification';
-import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
+import { jsonResponseNoCache, errorResponseNoCache } from '../../../../lib/ServerApiUtils';
 
 // Check if we're in a build environment
 const isBuildTime = process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build';

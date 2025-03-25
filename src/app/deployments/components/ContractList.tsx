@@ -1,31 +1,24 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
-import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Loader2, Edit } from 'lucide-react';
-import api from '@/lib/api';
-import { getNetworkDisplayName, getAddressExplorerUrl, getTxExplorerUrl } from '@/lib/networkUtils';
+import { api } from '@/lib/ClientApiUtils';
 
-interface ContractDeployment {
-  id: string;
-  contract_address: string;
-  chain_id: number;
-  network?: string;
-  deployer_address: string;
-  name: string;
-  symbol: string;
-  base_uri: string;
-  deployment_tx_hash: string;
-  deployment_timestamp: string;
-  verification_status: 'pending' | 'verified' | 'failed';
-  verification_message?: string;
-  verification_timestamp?: string;
-  created_at: string | null;
-}
+// Import types and utilities
+import { ContractDeployment } from './types';
+import { hasPendingContracts, isRecentlyDeployed } from './utils';
+
+// Import components
+import { NetworkToggle } from './NetworkToggle';
+import { ContractCard } from './ContractCard';
+import {
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  NoWalletState,
+  NoContractsFoundState
+} from './StateComponents';
 
 export function ContractList() {
   const { address } = useAccount();
@@ -44,8 +37,6 @@ export function ContractList() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
   const lastPollTimeRef = useRef<number>(0);
-  
-  // Debug counter to track number of polls
   const pollCountRef = useRef<number>(0);
 
   // Cleanup function to stop polling
@@ -97,12 +88,7 @@ export function ContractList() {
     }
   };
 
-  // Helper function to check if there are any pending contracts
-  const hasPendingContracts = (contractsToCheck: ContractDeployment[]) => {
-    return contractsToCheck.some(contract => contract.verification_status === 'pending');
-  };
-
-  // Modify the initial load effect to check for pending contracts
+  // Load contracts initially
   useEffect(() => {
     let mounted = true;
     
@@ -150,7 +136,7 @@ export function ContractList() {
     };
   }, [address]);
 
-  // Effect to monitor contracts for pending status and start/stop polling accordingly
+  // Monitor contracts for pending status
   useEffect(() => {
     // Don't do anything if we're still loading the initial data
     if (loading) return;
@@ -170,9 +156,6 @@ export function ContractList() {
 
   // Handle countdown timers for verification cooldowns
   useEffect(() => {
-    const cooldownTimers: { [key: string]: NodeJS.Timeout } = {};
-    
-    // Update cooldown timers every second
     const interval = setInterval(() => {
       setCooldowns(prev => {
         const updated = { ...prev };
@@ -190,22 +173,16 @@ export function ContractList() {
       });
     }, 1000);
     
-    return () => {
-      // Clean up interval and all timers
-      clearInterval(interval);
-      Object.values(cooldownTimers).forEach(timer => clearTimeout(timer));
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  // Add an effect to update the countdown timer UI every second
+  // Update countdown timer UI
   useEffect(() => {
-    // Force UI updates every second for contracts with active countdowns
     const hasDeployedContracts = contracts.some(isRecentlyDeployed);
     
     if (hasDeployedContracts) {
       const interval = setInterval(() => {
-        // This state update will trigger a re-render even though no actual data changes
-        // Just to refresh the UI for the countdown timers
+        // Trigger re-render for countdown timers
         setContracts(prevContracts => [...prevContracts]);
       }, 1000);
       
@@ -213,7 +190,7 @@ export function ContractList() {
     }
   }, [contracts]);
 
-  // Effect to filter contracts based on network toggle
+  // Filter contracts based on network toggle
   useEffect(() => {
     if (showAllNetworks) {
       setFilteredContracts(contracts);
@@ -225,7 +202,7 @@ export function ContractList() {
     }
   }, [contracts, showAllNetworks, chainId]);
 
-  // Modify loadContracts to update only the necessary state
+  // Load contracts (can be called manually or by polling)
   const loadContracts = async (pageNum = 1, isPolling = false) => {
     try {
       // Only show loading indicator for initial/manual loads, not polling
@@ -296,43 +273,6 @@ export function ContractList() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'verified':
-        return 'text-green-600';
-      case 'failed':
-        return 'text-red-600';
-      default:
-        return 'text-yellow-600';
-    }
-  };
-
-  const getBlockExplorerUrl = (chainId: number, contractAddress: string, isTx = false) => {
-    // Get network name from chain ID
-    let networkName = '';
-    
-    switch (chainId) {
-      case 1:
-        networkName = 'mainnet';
-        break;
-      case 11155111:
-        networkName = 'sepolia';
-        break;
-      case 137:
-        networkName = 'polygon';
-        break;
-      case 80002:
-        networkName = 'amoy';
-        break;
-    }
-    
-    if (isTx) {
-      return getTxExplorerUrl(contractAddress, networkName);
-    }
-    
-    return getAddressExplorerUrl(contractAddress, networkName);
-  };
-
   const handleVerifyContract = async (contractId: string) => {
     try {
       // Find the contract in our local state
@@ -399,213 +339,54 @@ export function ContractList() {
     }
   };
 
-  // Function to format the cooldown time
-  const formatCooldown = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes > 0 ? `${minutes}m ` : ''}${remainingSeconds}s`;
-  };
-
-  const isRecentlyDeployed = (contract: ContractDeployment): boolean => {
-    const timestamp = contract.deployment_timestamp || contract.created_at;
-    if (!timestamp) return false;
-    
-    const deployTime = new Date(timestamp).getTime();
-    const now = Date.now();
-    const secondsSinceDeployment = Math.floor((now - deployTime) / 1000);
-    
-    return secondsSinceDeployment < 120; // Block retries for 120 seconds
-  };
-  
-  // Add missing functions
-  const isRecentlyVerified = (contract: ContractDeployment): boolean => {
-    return cooldowns[contract.id] > 0;
-  };
-  
+  // Helper function for verification status
   const isVerificationDisabled = (contractId: string): boolean => {
     return verifyingContracts[contractId] || 
            (cooldowns[contractId] > 0) || 
            filteredContracts.find(c => c.id === contractId)?.verification_status === 'verified';
   };
-  
-  // Update getWaitTimeMessage to use 120 seconds
-  const getWaitTimeMessage = (contract: ContractDeployment): string => {
-    const timestamp = contract.deployment_timestamp || contract.created_at;
-    if (!timestamp) return "Verification scheduled";
-    
-    const deployTime = new Date(timestamp).getTime();
-    const now = Date.now();
-    const secondsSinceDeployment = Math.floor((now - deployTime) / 1000);
-    const secondsRemaining = 120 - secondsSinceDeployment;
-    
-    if (secondsRemaining <= 0) return "Verification in progress";
-    return `Verification scheduled (${secondsRemaining}s)`;
-  };
 
-  // Helper function to convert chain ID to network name
-  const getNetworkNameForChainId = (chainId: number): string => {
-    switch (chainId) {
-      case 1:
-        return 'mainnet';
-      case 11155111:
-        return 'sepolia';
-      case 137:
-        return 'polygon';
-      case 80002:
-        return 'amoy';
-      default:
-        return 'unknown';
-    }
-  };
-
+  // Render based on state
   if (!address) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-600">Please connect your wallet to view your contracts.</p>
-      </div>
-    );
+    return <NoWalletState />;
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-      </div>
-    );
+  if (loading && page === 1) {
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="text-center py-4 text-red-600">
-        Error: {error}
-      </div>
-    );
+    return <ErrorState message={error} />;
   }
 
   if (contracts.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Deployments Yet</h3>
-        <p className="text-gray-600 mb-4">You haven't deployed any contracts yet. Start by creating and deploying your first NFT contract.</p>
-        <Link href="/contract-creation">
-          <Button>Create New Contract</Button>
-        </Link>
-      </div>
-    );
+    return <EmptyState />;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-2">
-        <Switch 
-          id="network-toggle" 
-          checked={showAllNetworks}
-          onCheckedChange={setShowAllNetworks}
-        />
-        <Label htmlFor="network-toggle">
-          {showAllNetworks ? "Showing all networks" : "Showing current network only"}
-        </Label>
-      </div>
+      <NetworkToggle 
+        showAllNetworks={showAllNetworks} 
+        setShowAllNetworks={setShowAllNetworks} 
+      />
 
       {loading && page === 1 ? (
-        <div className="flex justify-center p-8">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-        </div>
+        <LoadingState />
       ) : error ? (
-        <div className="p-4 border rounded-md bg-red-50 text-red-500">
-          {error}
-        </div>
+        <ErrorState message={error} />
       ) : filteredContracts.length === 0 ? (
-        <div className="p-6 text-center border rounded-md bg-gray-50">
-          <p className="text-gray-500">No contracts found</p>
-          <Link href="/create">
-            <Button className="mt-4">Deploy New Contract</Button>
-          </Link>
-        </div>
+        <NoContractsFoundState />
       ) : (
         <div className="space-y-4">
           {filteredContracts.map(contract => (
-            <div key={contract.id} className="p-6 bg-white rounded-lg shadow-md">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-xl font-bold">{contract.name}</h3>
-                  <p className="text-gray-600">Symbol: {contract.symbol}</p>
-                </div>
-                <span className={`font-semibold ${getStatusColor(contract.verification_status)}`}>
-                  Verification: {contract.verification_status.charAt(0).toUpperCase() + contract.verification_status.slice(1)}
-                </span>
-              </div>
-              
-              <div className="mt-4 space-y-2">
-                <p className="text-sm">
-                  <span className="font-medium">Address:</span>{' '}
-                  <a
-                    href={getBlockExplorerUrl(contract.chain_id, contract.contract_address)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-blue-500 hover:underline"
-                  >
-                    {contract.contract_address}
-                  </a>
-                </p>
-                <div className="text-sm mb-2">
-                  <span className="font-medium">Network:</span> {getNetworkDisplayName(getNetworkNameForChainId(contract.chain_id))}
-                </div>
-                <p className="text-sm">
-                  <span className="font-medium">Deployment:</span>{' '}
-                  <a
-                    href={getBlockExplorerUrl(contract.chain_id, contract.deployment_tx_hash, true)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline"
-                  >
-                    View Transaction
-                  </a>
-                </p>
-                {contract.verification_message && (
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Message:</span> {contract.verification_message}
-                  </p>
-                )}
-                
-                {/* Verification button */}
-                {contract.verification_status !== 'verified' && (
-                  <>
-                    <Button
-                      onClick={() => handleVerifyContract(contract.id)}
-                      disabled={isVerificationDisabled(contract.id)}
-                      variant="outline"
-                      size="sm"
-                      className="mr-2"
-                    >
-                      {verifyingContracts[contract.id] ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Verifying...
-                        </>
-                      ) : (
-                        isRecentlyVerified(contract) ? (
-                          <>
-                            Retry in {cooldowns[contract.id] || 0}s
-                          </>
-                        ) : (
-                          'Verify Contract'
-                        )
-                      )}
-                    </Button>
-                  </>
-                )}
-                
-                {/* Edit NFT Button */}
-                <Link href={`/nft-editing?contractId=${contract.id}`}>
-                  <Button variant="outline" size="sm" className="ml-2">
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit NFTs
-                  </Button>
-                </Link>
-                
-              </div>
-            </div>
+            <ContractCard
+              key={contract.id}
+              contract={contract}
+              onVerify={handleVerifyContract}
+              verifyingContracts={verifyingContracts}
+              cooldowns={cooldowns}
+              isVerificationDisabled={isVerificationDisabled}
+            />
           ))}
           
           {hasMore && (

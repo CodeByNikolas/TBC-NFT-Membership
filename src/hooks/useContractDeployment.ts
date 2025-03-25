@@ -1,11 +1,12 @@
 'use client'
 
-import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData, usePublicClient } from 'wagmi'
-import { parseEther, formatUnits, encodeAbiParameters } from 'viem'
+import { useAccount, useChainId, useDeployContract, useWaitForTransactionReceipt, useFeeData, usePublicClient, useWalletClient } from 'wagmi'
+import { formatUnits, encodeAbiParameters, encodeFunctionData, parseAbi } from 'viem'
 import contractData from '@/contracts/TBCNFT.json'
-import api from '@/lib/api'
 import React from 'react'
-import { getNetworkNameFromChainId, getDisplayNameFromChainId, getInfuraRpcUrl } from '@/lib/networkUtils'
+import { api } from '@/lib/ClientApiUtils'
+import ethersUtils from '@/lib/ethersUtil'
+
 
 interface DeployContractResult {
   address: string
@@ -134,7 +135,7 @@ export function useContractDeployment(): ContractDeploymentHook {
       }
 
       // Fallback to manual RPC call if publicClient isn't available or fails
-      const rpcUrl = getInfuraRpcUrl(chainId);
+      const rpcUrl = ethersUtils.getRpcUrl(chainId);
       if (!rpcUrl) {
         console.log('No Infura API key provided, and wallet provider failed. Using fallback gas estimates.');
         // Return fallback estimates since we can't make the RPC call
@@ -144,7 +145,7 @@ export function useContractDeployment(): ContractDeploymentHook {
           return BigInt(450000); // Ethereum and other chains
         }
       }
-      
+      console.log('Using RPC URL:', rpcUrl);
       // Estimate gas through RPC with timeout protection
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -249,7 +250,7 @@ export function useContractDeployment(): ContractDeploymentHook {
           }
           
           // Fallback to Infura RPC if available
-          const rpcUrl = getInfuraRpcUrl(chainId);
+          const rpcUrl = ethersUtils.getRpcUrl(chainId);
           if (!rpcUrl) {
             console.warn('No Infura API key provided, and wallet provider failed. Retrying later...');
             // Continue polling even without an RPC endpoint, as the wallet provider might work next time

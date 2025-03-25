@@ -1,6 +1,6 @@
 'use client';
 
-import { ContractList } from '@/components/ContractList';
+import { ContractList } from './components/ContractList';
 
 export default function DeploymentsPage() {
   return (

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "update-contract": "node scripts/update-contract.js"
+    "update-contract": "node scripts/update-contract.js",
+    "verify-contract": "tsx src/scripts/verify-contract.ts",
+    "verify": "tsx src/lib/verification/scripts/verify-contract.ts"
   },
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.1.6",
@@ -47,6 +49,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^9.0.8",
+    "autoprefixer": "^10.4.16",
     "dotenv": "^16.4.7",
     "eslint": "^9",
     "eslint-config-next": "15.2.3",

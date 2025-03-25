@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { jsonResponseNoCache, errorResponseNoCache } from '@/lib/apiUtils';
+import { supabaseAdmin } from '@/lib/supabaseUtils';
+import { jsonResponseNoCache, errorResponseNoCache } from '../../../../../lib/ServerApiUtils';
 
 export async function GET(
   request: Request,

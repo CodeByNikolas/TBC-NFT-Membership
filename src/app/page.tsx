@@ -32,7 +32,7 @@ export default function Home() {
             <div className="p-6">
               <ul className="list-disc pl-6 space-y-2">
                 <li>Connect with multiple wallet providers</li>
-                <li>Switch between different networks including Polygon Amoy testnet</li>
+                <li>Switch between different networks</li>
                 <li>Navigate to Contact Creation page (under construction)</li>
                 <li>Navigate to NFT Editing page (under construction)</li>
               </ul>

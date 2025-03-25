@@ -1,38 +1,10 @@
 import { http, createConfig } from 'wagmi'
-import { sepolia, mainnet, polygon } from 'wagmi/chains'
+import { sepolia, mainnet, polygon, polygonAmoy } from 'wagmi/chains'
 import { injected, walletConnect } from 'wagmi/connectors'
-
-// Define custom Amoy chain
-const amoy = {
-  id: 80002,
-  name: 'Polygon Amoy',
-  network: 'amoy',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'MATIC',
-    symbol: 'MATIC',
-  },
-  rpcUrls: {
-    default: { 
-      http: [
-        'https://rpc-amoy.polygon.technology'
-      ] 
-    },
-    public: {
-      http: [
-        'https://rpc-amoy.polygon.technology'
-      ]
-    }
-  },
-  blockExplorers: {
-    default: { name: 'PolygonScan Amoy', url: 'https://amoy.polygonscan.com' },
-  },
-  testnet: true,
-} as const
 
 // Create wagmi config
 export const config = createConfig({
-  chains: [sepolia, mainnet, polygon, amoy],
+  chains: [sepolia, mainnet, polygon, polygonAmoy],
   connectors: [
     injected(),
     walletConnect({
@@ -44,6 +16,6 @@ export const config = createConfig({
     [sepolia.id]: http(),
     [mainnet.id]: http(),
     [polygon.id]: http(),
-    [amoy.id]: http(),
+    [polygonAmoy.id]: http(),
   },
 }) 
