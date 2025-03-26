@@ -20,6 +20,12 @@ COPY package.json package-lock.json ./
 # We'll rebuild them after all deps are installed
 RUN npm install --ignore-scripts --legacy-peer-deps
 
+# Detect architecture and install appropriate Tailwind binary
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+      npm install @tailwindcss/oxide-linux-x64-musl; \
+    elif [ "$(uname -m)" = "aarch64" ]; then \
+      npm install @tailwindcss/oxide-linux-arm64-musl; \
+    fi
 # Rebuild any native modules that need compilation
 RUN npm rebuild
 
