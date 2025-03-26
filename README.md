@@ -1,6 +1,10 @@
-# TBC-NFT: Tum Blockchain Club Membership NFTs
+# TBC-NFT: TUM Blockchain Club Membership NFTs
 
-A Next.js application for managing and distributing membership NFTs for Tum Blockchain Club members. Each member gets their own unique NFT representing their membership in the club.
+A Next.js application for managing and distributing membership NFTs for TUM Blockchain Club members. Each member gets their own unique NFT representing their membership in the club.
+
+## Live Demo
+
+A live implementation of this project can be found at: [https://tbc-nft.nikolashack.com/](https://tbc-nft.nikolashack.com/)
 
 ## Features
 
@@ -8,13 +12,15 @@ A Next.js application for managing and distributing membership NFTs for Tum Bloc
 - Connect crypto wallets using WalletConnect's AppKit
 - Support for multiple EVM chains: Ethereum, Arbitrum, Optimism, Polygon
 - Network switching capability
+- Smart contract deployment and verification
 - Clean UI with shadcn components
 - Settings panel for API keys (Pinata and Infura)
+- Supabase integration for storing contract deployment data
 
 ## Prerequisites
 
 - Node.js 18+ 
-- npm or yarn
+- npm
 - WalletConnect Cloud Project ID
 - Docker (optional, for containerized deployment)
 
@@ -24,15 +30,13 @@ A Next.js application for managing and distributing membership NFTs for Tum Bloc
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/CodeByNikolas/TBC-NFT-Membership.git
+cd TBC-NFT-Membership
 ```
 
 2. Install dependencies:
 ```bash
 npm install
-# or
-yarn install
 ```
 
 3. Set up environment variables:
@@ -40,17 +44,12 @@ yarn install
    ```bash
    cp .env.example .env.local
    ```
-   - Get a Project ID from [Reown Cloud](https://cloud.reown.com) by creating an account and a new project
-   - Add your Project ID to the `.env.local` file:
-   ```
-   NEXT_PUBLIC_PROJECT_ID=your_project_id_here
-   ```
+   - Get a Project ID from [WalletConnect Cloud](https://cloud.reown.com) by creating an account and a new project
+   - Add your Project ID and other required values to the `.env.local` file
 
 4. Run the development server:
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
 5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -62,19 +61,10 @@ yarn dev
 2. Build and run the Docker container:
 ```bash
 # Build the container
-docker build -t wallet-demo .
+docker build -t tbc-nft .
 
 # Run the container
-docker run -p 3000:3000 -e NEXT_PUBLIC_PROJECT_ID=your_project_id_here wallet-demo
-```
-
-Alternatively, use Docker Compose:
-```bash
-# Create a .env file with your NEXT_PUBLIC_PROJECT_ID
-echo "NEXT_PUBLIC_PROJECT_ID=your_project_id_here" > .env
-
-# Build and run with Docker Compose
-docker-compose up -d
+docker run -p 3000:3000 -e NEXT_PUBLIC_PROJECT_ID=your_project_id_here tbc-nft
 ```
 
 ## API Keys Configuration
@@ -82,38 +72,35 @@ docker-compose up -d
 The application supports configuring API keys for:
 - **IPFS Pinata**: For storing files on IPFS
 - **Infura**: For RPC provider access
+- **Block Explorer APIs**: For contract verification (Etherscan, Polygonscan, etc.)
 
-These keys can be configured in the settings panel (gear icon in the navbar) and will be stored in your browser's localStorage.
+These keys can be configured in the settings panel (gear icon in the navbar) or through environment variables.
 
 ## GitHub Actions Deployment
 
 This project includes a GitHub Actions workflow for continuous integration and deployment. To use it:
 
 1. Enable GitHub Actions for your repository
-2. Set up the following secrets in your repository settings:
-   - `NEXT_PUBLIC_PROJECT_ID`: Your WalletConnect Project ID from [Reown Cloud](https://cloud.reown.com)
-
-## How to Use
-
-1. Click the "Connect Wallet" button to connect your crypto wallet.
-2. Once connected, you'll see a "Network Selection" button appear.
-3. Use this button to switch between different blockchain networks.
-4. Click the gear icon to access settings for API keys.
+2. Set up the necessary secrets in your repository settings, including your WalletConnect Project ID
 
 ## Technologies Used
 
-- [Next.js](https://nextjs.org/) - React framework
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
+- [Next.js](https://nextjs.org/) - React framework (v15)
+- [React](https://react.dev/) - UI library (v19)
+- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework (v4)
 - [shadcn/ui](https://ui.shadcn.com/) - UI component library
 - [WalletConnect AppKit](https://docs.reown.com/appkit/overview) - Wallet connection SDK
 - [wagmi](https://wagmi.sh/) - React hooks for Ethereum
+- [ethers.js](https://docs.ethers.org/v6/) - Ethereum library
+- [Hardhat](https://hardhat.org/) - Ethereum development environment
+- [OpenZeppelin Contracts](https://www.openzeppelin.com/contracts) - Smart contract library
+- [Supabase](https://supabase.com/) - Database and backend
 - [Docker](https://www.docker.com/) - Containerization platform
 - [GitHub Actions](https://github.com/features/actions) - CI/CD workflow
-- [Supabase](https://supabase.com/) - Open source Firebase alternative
 
 ## Database Schema (Supabase)
 
-The application uses Supabase for database management. Here's the schema for the main tables:
+The application uses Supabase for database management. Here's the current schema:
 
 ### contract_deployments
 
@@ -121,19 +108,15 @@ The application uses Supabase for database management. Here's the schema for the
 |--------|------|-------------|
 | id | uuid | Primary key for deployments |
 | contract_address | text | Contract address on blockchain |
-| chain_id | integer | Chain ID of the network |
+| chain_id | int4 | Chain ID of the network |
 | deployer_address | text | Address that deployed the contract |
-| name | text | Contract name |
-| symbol | text | Contract symbol |
-| base_uri | text | Base URI for NFT metadata |
 | deployment_tx_hash | text | Transaction hash of deployment |
 | deployment_timestamp | timestamptz | When contract was deployed |
-| verification_status | text | Status of verification (pending, success, failed) |
+| verification_status | text | Status of verification |
 | verification_message | text | Message about verification status |
 | verification_timestamp | timestamptz | When verification was completed |
-| constructor_args | text | Encoded constructor arguments for verification |
 | created_at | timestamptz | Record creation timestamp |
-| updated_at | timestamptz | Record update timestamp |
+| constructor_args | text | Encoded constructor arguments for verification |
 
 ## Supabase Setup
 
@@ -145,24 +128,20 @@ To set up Supabase for this project:
 4. Add them to your `.env.local` file:
 ```
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_KEY=your_service_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
 ```
 
-## Learn More
+## Smart Contract
 
-To learn more about Next.js, take a look at the following resources:
+The project includes a custom ERC721 NFT contract built with OpenZeppelin. Key features:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- ERC721 token standard with URI storage
+- Batch minting capabilities
+- Admin transfer functionality
+- Metadata URI management
+- Base URI updates
+- Owner-controlled minting and burning
 
 ## Supported Networks
 
@@ -176,7 +155,12 @@ The application supports the following networks for contract deployment and inte
 - Amoy Testnet
 - Mainnet
 
-## Contract Deployment
+### Additional Networks
+- Arbitrum
+- Optimism
+- Base
+
+## Contract Deployment & Verification
 
 The application uses Hardhat for smart contract development and deployment. The contract deployment is handled directly from the browser using the connected wallet.
 
@@ -195,4 +179,23 @@ The application uses Hardhat for smart contract development and deployment. The 
 
 The deployed contract will be owned by the connected wallet address.
 
-Note: For contract deployment, the application will use the RPC provider from your connected wallet. Custom RPC URLs are optional and can be configured in the `.env` file if needed.
+## Future Improvements
+
+- Multi-signature ownership for club contracts
+- Integration with university authentication systems
+- Enhanced metadata with member information
+- DAO governance functionality
+- Member-only gated content access
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+The Apache License 2.0:
+- Allows free use, modification, and distribution of the code
+- Requires preservation of copyright and license notices
+- Requires attribution to "Nikolas Hack (CodeByNikolas)" when using this work
+- Provides an express grant of patent rights from contributors
+- Does not require derivative works to be released under the same license
+
+Copyright 2025 Nikolas Hack (CodeByNikolas)
