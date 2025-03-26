@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { Button } from "@/components/ui/button";
 import { api } from '@/lib/ClientApiUtils';
+import tbcNFTUtils from '@/lib/tbcNFTUtils'; // Import the TBCNFT utility
 
 // Import types and utilities
 import { ContractDeployment } from './types';
@@ -19,6 +20,7 @@ import {
   NoWalletState,
   NoContractsFoundState
 } from './StateComponents';
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function ContractList() {
   const { address } = useAccount();
@@ -107,6 +109,8 @@ export function ContractList() {
           if (!mounted) return;
           
           const contractsData = response.data.data;
+          
+          // Set contracts immediately so UI renders quickly
           setContracts(contractsData);
           setHasMore(contractsData.length === 10);
           
@@ -114,6 +118,13 @@ export function ContractList() {
           if (hasPendingContracts(contractsData)) {
             console.log('Initial load found pending contracts, starting polling');
             startPolling(1);
+          }
+          
+          // After setting UI state, start async loading of on-chain data
+          if (contractsData.length > 0) {
+            setTimeout(() => {
+              loadOnChainDataForContracts(contractsData, mounted);
+            }, 0);
           }
         } catch (err: any) {
           if (mounted) {
@@ -135,6 +146,84 @@ export function ContractList() {
       stopPolling();
     };
   }, [address]);
+
+  // Add new function to load on-chain data with retries
+  const loadOnChainDataForContracts = async (
+    contractsToLoad: ContractDeployment[],
+    isMounted: boolean,
+  ) => {
+    // Process in batches to avoid overwhelming the RPC provider
+    const fetchBatchSize = 3;
+    const maxRetries = 2;
+    
+    for (let i = 0; i < contractsToLoad.length; i += fetchBatchSize) {
+      const batch = contractsToLoad.slice(i, i + fetchBatchSize);
+      await Promise.all(
+        batch.map(async (contract: ContractDeployment) => {
+          let retryCount = 0;
+          let success = false;
+          
+          // Try up to maxRetries times
+          while (!success && retryCount <= maxRetries) {
+            try {
+              if (retryCount > 0) {
+                console.log(`Retry ${retryCount}/${maxRetries} for contract ${contract.contract_address}`);
+              }
+              
+              const onChainData = await tbcNFTUtils.fetchTBCNFTInfo(
+                contract.contract_address,
+                contract.chain_id
+              );
+              
+              if (onChainData && isMounted) {
+                setContracts(prevContracts => 
+                  prevContracts.map(c => 
+                    c.id === contract.id 
+                      ? { 
+                          ...c, 
+                          onChainData: {
+                            name: onChainData.name,
+                            symbol: onChainData.symbol,
+                            baseURI: onChainData.baseURI,
+                            totalSupply: onChainData.totalSupply,
+                            owner: onChainData.owner
+                          }
+                        } 
+                      : c
+                  )
+                );
+                success = true;
+              } else {
+                // If no data returned but no error thrown, count as a failure
+                retryCount++;
+                if (retryCount <= maxRetries) {
+                  // Wait a bit longer between each retry
+                  await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching on-chain data for contract ${contract.contract_address}:`, error);
+              retryCount++;
+              if (retryCount <= maxRetries) {
+                // Wait a bit longer between each retry
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+              }
+            }
+          }
+          
+          // If all retries failed, log a final error
+          if (!success) {
+            console.error(`Failed to fetch on-chain data for ${contract.contract_address} after ${maxRetries} retries`);
+          }
+        })
+      );
+      
+      // Add a small delay between batches to avoid rate limits
+      if (i + fetchBatchSize < contractsToLoad.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  };
 
   // Monitor contracts for pending status
   useEffect(() => {
@@ -202,7 +291,7 @@ export function ContractList() {
     }
   }, [contracts, showAllNetworks, chainId]);
 
-  // Load contracts (can be called manually or by polling)
+  // Update loadContracts function to handle async loading for pagination
   const loadContracts = async (pageNum = 1, isPolling = false) => {
     try {
       // Only show loading indicator for initial/manual loads, not polling
@@ -222,6 +311,11 @@ export function ContractList() {
 
       if (pageNum === 1) {
         setContracts(contractsData);
+        
+        // Start async loading of on-chain data for first page
+        setTimeout(() => {
+          loadOnChainDataForContracts(contractsData, true);
+        }, 0);
       } else if (isPolling) {
         // For polling updates, only update contracts that have changed status
         setContracts(prevContracts => {
@@ -236,7 +330,14 @@ export function ContractList() {
               if (updatedContracts[existingIndex].verification_status !== newContract.verification_status ||
                   updatedContracts[existingIndex].verification_message !== newContract.verification_message) {
                 console.log(`Contract ${newContract.id} changed status: ${updatedContracts[existingIndex].verification_status} -> ${newContract.verification_status}`);
-                updatedContracts[existingIndex] = newContract;
+                
+                // Preserve on-chain data when updating
+                const onChainData = updatedContracts[existingIndex].onChainData;
+                updatedContracts[existingIndex] = {
+                  ...newContract,
+                  onChainData
+                };
+                
                 hasChanges = true;
               }
             }
@@ -246,7 +347,16 @@ export function ContractList() {
         });
       } else {
         // Normal pagination append
-        setContracts(prev => [...prev, ...contractsData]);
+        setContracts(prev => {
+          const newContracts = [...prev, ...contractsData];
+          
+          // Asynchronously load on-chain data for the new contracts
+          setTimeout(() => {
+            loadOnChainDataForContracts(contractsData, true);
+          }, 0);
+          
+          return newContracts;
+        });
       }
 
       // Only update pagination info for manual loads
@@ -364,43 +474,57 @@ export function ContractList() {
   }
 
   return (
-    <div className="space-y-6">
-      <NetworkToggle 
-        showAllNetworks={showAllNetworks} 
-        setShowAllNetworks={setShowAllNetworks} 
-      />
-
-      {loading && page === 1 ? (
-        <LoadingState />
-      ) : error ? (
-        <ErrorState message={error} />
-      ) : filteredContracts.length === 0 ? (
-        <NoContractsFoundState />
-      ) : (
-        <div className="space-y-4">
-          {filteredContracts.map(contract => (
-            <ContractCard
-              key={contract.id}
-              contract={contract}
-              onVerify={handleVerifyContract}
-              verifyingContracts={verifyingContracts}
-              cooldowns={cooldowns}
-              isVerificationDisabled={isVerificationDisabled}
-            />
-          ))}
-          
-          {hasMore && (
-            <div className="text-center py-4">
-              <Button
-                onClick={loadMore}
-                variant="outline"
-              >
-                Load More
-              </Button>
-            </div>
-          )}
+    <TooltipProvider>
+      <div>
+        <div className="mb-4 flex justify-between items-center">
+          <NetworkToggle
+            showAllNetworks={showAllNetworks}
+            setShowAllNetworks={setShowAllNetworks}
+          />
+          {/* Add any other controls here */}
         </div>
-      )}
-    </div>
+  
+        <div className="space-y-4">
+          {filteredContracts.length > 0 ? (
+            <>
+              {filteredContracts.map(contract => (
+                <ContractCard
+                  key={contract.id}
+                  contract={contract}
+                  onVerify={handleVerifyContract}
+                  verifyingContracts={verifyingContracts}
+                  cooldowns={cooldowns}
+                  isVerificationDisabled={isVerificationDisabled}
+                />
+              ))}
+  
+              {hasMore && (
+                <div className="mt-6 text-center">
+                  <Button 
+                    onClick={loadMore}
+                    disabled={loading}
+                    className="px-6"
+                  >
+                    Load More
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            address ? (
+              loading ? (
+                <LoadingState /> 
+              ) : (
+                <NoContractsFoundState />
+              )
+            ) : (
+              <NoWalletState />
+            )
+          )}
+          
+          {error && !loading && <ErrorState message={error} />}
+        </div>
+      </div>
+    </TooltipProvider>
   );
 }

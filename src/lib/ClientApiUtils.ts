@@ -5,7 +5,7 @@
  * to external APIs or our own backend. These utilities are designed to run in
  * the browser and handle common client-side communication needs.
  */
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
 
 // Cache prevention headers used across all HTTP requests
 export const CACHE_PREVENTION_HEADERS = {

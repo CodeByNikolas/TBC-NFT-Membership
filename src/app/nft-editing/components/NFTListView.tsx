@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import Image from "next/image";
 
 interface NFTData {
@@ -8,13 +8,14 @@ interface NFTData {
   image: string;
   description?: string;
   attributes?: any[];
+  isLoading?: boolean;
 }
 
 interface NFTListViewProps {
   nfts: NFTData[];
   onEdit: (id: number) => void;
   onView: (id: number) => void;
-  onAdd: () => void;
+  onAdd?: () => void;
 }
 
 export function NFTListView({ nfts, onEdit, onView, onAdd }: NFTListViewProps) {
@@ -39,28 +40,48 @@ export function NFTListView({ nfts, onEdit, onView, onAdd }: NFTListViewProps) {
               className="rounded-md object-cover"
               sizes="40px"
             />
+            {nft.isLoading && (
+              <div className="absolute inset-0 bg-black/20 flex items-center justify-center rounded-md">
+                <Loader2 className="w-4 h-4 text-white animate-spin" />
+              </div>
+            )}
           </div>
-          <div className="col-span-4 font-medium truncate">{nft.name}</div>
+          <div className="col-span-4 font-medium truncate flex items-center">
+            {nft.name}
+            {nft.isLoading && <Loader2 className="ml-2 w-3 h-3 text-gray-400 animate-spin" />}
+          </div>
           <div className="col-span-4 text-sm text-gray-500 truncate">{nft.description || '-'}</div>
           <div className="col-span-2 flex space-x-2">
-            <Button size="sm" variant="outline" onClick={() => onEdit(nft.id)}>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => onEdit(nft.id)}
+              disabled={nft.isLoading}
+            >
               Edit
             </Button>
-            <Button size="sm" variant="outline" onClick={() => onView(nft.id)}>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => onView(nft.id)}
+              disabled={nft.isLoading}
+            >
               View
             </Button>
           </div>
         </div>
       ))}
       
-      <Button 
-        className="w-full py-6 border-dashed border-2 shadow-none hover:shadow-sm bg-transparent text-gray-500 hover:bg-gray-50"
-        variant="outline"
-        onClick={onAdd}
-      >
-        <Plus className="mr-2 h-4 w-4" />
-        Add New NFT
-      </Button>
+      {onAdd && (
+        <Button 
+          className="w-full py-6 border-dashed border-2 shadow-none hover:shadow-sm bg-transparent text-gray-500 hover:bg-gray-50"
+          variant="outline"
+          onClick={onAdd}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add New NFT
+        </Button>
+      )}
     </div>
   );
 } 

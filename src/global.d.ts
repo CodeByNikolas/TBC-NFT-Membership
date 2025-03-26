@@ -15,11 +15,5 @@ declare namespace NodeJS {
     NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
     ETHERSCAN_API_KEY?: string;
     POLYGONSCAN_API_KEY?: string;
-    SEPOLIA_RPC_URL?: string;
-    MUMBAI_RPC_URL?: string;
-    GOERLI_RPC_URL?: string;
-    MAINNET_RPC_URL?: string;
-    POLYGON_RPC_URL?: string;
-    AMOY_RPC_URL?: string;
   }
 }

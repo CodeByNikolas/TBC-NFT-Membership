@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import ethersUtils from "@/lib/ethersUtil";
+
 interface ContractDetailsBannerProps {
   name: string;
   symbol: string;
@@ -9,6 +10,7 @@ interface ContractDetailsBannerProps {
   baseUri?: string;
   totalSupply: number;
   deployerAddress: string;
+  isLoading?: boolean;
 }
 
 export function ContractDetailsBanner({
@@ -19,6 +21,7 @@ export function ContractDetailsBanner({
   baseUri,
   totalSupply,
   deployerAddress,
+  isLoading = false,
 }: ContractDetailsBannerProps) {
   
   // Get formatted network name
@@ -46,6 +49,7 @@ export function ContractDetailsBanner({
             <div className="flex items-center gap-2 mb-2">
               <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
               <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full font-medium">{symbol}</span>
+              {isLoading && <Loader2 className="w-4 h-4 ml-1 animate-spin text-gray-400" />}
             </div>
             <div className="space-y-1 mb-4 md:mb-0">
               <p className="text-sm text-gray-500 flex items-center">
@@ -105,7 +109,10 @@ export function ContractDetailsBanner({
           <div className="flex flex-col items-start md:items-end">
             <div className="bg-primary/10 rounded-lg p-4 flex flex-col items-center">
               <span className="text-sm text-gray-500">Total Supply</span>
-              <span className="text-3xl font-bold text-primary">{totalSupply}</span>
+              <div className="flex items-center">
+                <span className="text-3xl font-bold text-primary">{totalSupply}</span>
+                {isLoading && <Loader2 className="ml-2 w-4 h-4 animate-spin text-primary" />}
+              </div>
             </div>
           </div>
         </div>

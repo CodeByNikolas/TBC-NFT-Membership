@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAccount, usePublicClient } from 'wagmi';
 import { parseAbi } from 'viem';
 import { api } from '@/lib/ClientApiUtils';
+import tbcNFTUtils from '@/lib/tbcNFTUtils'; // Import the TBCNFT utility
 
 // Shadcn components
 import { Button } from "@/components/ui/button";
@@ -28,44 +29,29 @@ import { NFTCard } from './components/NFTCard';
 import { AddNFTCard } from './components/AddNFTCard';
 import { NFTListView } from './components/NFTListView';
 
-// ERC721 ABI with totalSupply function
-const erc721ABI = parseAbi([
-  'function name() view returns (string)',
-  'function symbol() view returns (string)',
-  'function tokenURI(uint256 tokenId) view returns (string)',
-  'function balanceOf(address owner) view returns (uint256)',
-  'function ownerOf(uint256 tokenId) view returns (address)',
-  'function totalSupply() view returns (uint256)'
+// This is simpler since we use tbcNFTUtils now
+const tokenURIABI = parseAbi([
+  'function tokenURI(uint256 tokenId) view returns (string)'
 ]);
-
-// Optional ABI containing just totalSupply for detection
-const totalSupplyABI = parseAbi([
-  'function totalSupply() view returns (uint256)'
-]);
-
-// ERC165 interface detection
-const erc165ABI = parseAbi([
-  'function supportsInterface(bytes4 interfaceId) view returns (bool)'
-]);
-
-// ERC721Enumerable interface ID (contains totalSupply)
-const ERC721_ENUMERABLE_INTERFACE_ID = '0x780e9d63';
 
 interface ContractData {
   id: string;
   contract_address: string;
-  network: string;
+  chain_id: number;
   deployer_address: string;
   name: string;
   symbol: string;
   base_uri: string;
   deployment_tx_hash: string;
-  deployment_timestamp: string;
   verification_status: 'pending' | 'verified' | 'failed';
-  verification_message?: string;
-  verification_timestamp?: string;
-  created_at: string | null;
-  chain_id: string;
+  // Add on-chain data
+  onChainData?: {
+    name?: string;
+    symbol?: string;
+    baseURI?: string;
+    totalSupply?: number;
+    owner?: string;
+  };
 }
 
 interface NFTData {
@@ -74,6 +60,8 @@ interface NFTData {
   image: string;
   description?: string;
   attributes?: any[];
+  isLoading?: boolean; // Add loading state for each NFT
+  tokenURI?: string;   // Add token URI for reference
 }
 
 // This is the main component that will be rendered by Next.js
@@ -110,6 +98,27 @@ function EmptyState() {
   );
 }
 
+// NFT loading skeleton component
+function NFTLoadingSkeleton({ count = 6 }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      {Array(count).fill(0).map((_, index) => (
+        <Card key={index} className="overflow-hidden">
+          <Skeleton className="w-full aspect-square" />
+          <CardContent className="p-4">
+            <Skeleton className="h-5 w-3/4 mb-2" />
+            <Skeleton className="h-4 w-full" />
+            <div className="flex justify-between mt-4">
+              <Skeleton className="h-10 w-[48%]" />
+              <Skeleton className="h-10 w-[48%]" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 // Error state component
 function ErrorState({ error }: { error: string }) {
   return (
@@ -125,27 +134,28 @@ function ErrorState({ error }: { error: string }) {
   );
 }
 
-// The main content component - now using useSearchParams properly within a client component
-// that is wrapped in Suspense
+// The main content component - now using tbcNFTUtils
 function NFTEditingContent() {
   // The useSearchParams hook is now safely used inside a component that's wrapped with Suspense
   const searchParams = useSearchParams();
   const contractId = searchParams.get('contractId');
   
   const [contract, setContract] = useState<ContractData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [contractLoading, setContractLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nfts, setNfts] = useState<NFTData[]>([]);
-  const [totalSupply, setTotalSupply] = useState<number>(0);
+  const [nftsLoading, setNftsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const { address } = useAccount();
   const publicClient = usePublicClient();
 
+  // Function to load contract data from API and blockchain
   const fetchContractDetails = useCallback(async () => {
     if (!contractId) return;
     
-    setLoading(true);
+    setContractLoading(true);
     try {
       // Try to get contract data from Supabase using the dedicated endpoint
       const response = await api.get(`/api/contracts/deployments/${contractId}`);
@@ -155,244 +165,299 @@ function NFTEditingContent() {
         throw new Error('Contract not found');
       }
       
+      // Set initial contract data to render the UI quickly
       setContract(contractData);
+      setContractLoading(false);
       
-      // Now fetch on-chain data
-      if (contractData.contract_address && publicClient) {
-        // Default placeholder count for NFTs if we can't get it from the blockchain
-        const placeholderCount = 6;
-        const hasUsedPlaceholder = false;
-        
+      // Now fetch on-chain data asynchronously
+      if (contractData.contract_address) {
         try {
-          // Try multiple approaches to check for totalSupply
-          let totalSupplyFound = false;
+          // Use tbcNFTUtils to fetch on-chain contract data
+          const onChainData = await tbcNFTUtils.fetchTBCNFTInfo(
+            contractData.contract_address,
+            Number(contractData.chain_id)
+          );
           
-          // Approach 1: Try to directly read the totalSupply (may fail with some errors)
-          try {
-            const data = await publicClient.readContract({
-              address: contractData.contract_address as `0x${string}`,
-              abi: totalSupplyABI,
-              functionName: 'totalSupply',
-            });
-            
-            setTotalSupply(Number(data));
-            const count = Math.min(Number(data), 12);
-            generateNFTs(count, contractData);
-            totalSupplyFound = true;
-            return; // If successful, exit early
-          } catch (err) {
-            // Silently handle this error - we'll try other approaches
-            // Don't log the warning as it's expected for many contracts
-          }
-          
-          // Approach 2: Check if the contract supports ERC721Enumerable via ERC165
-          try {
-            const supportsEnumerable = await publicClient.readContract({
-              address: contractData.contract_address as `0x${string}`,
-              abi: erc165ABI,
-              functionName: 'supportsInterface',
-              args: [ERC721_ENUMERABLE_INTERFACE_ID]
-            });
-            
-            if (supportsEnumerable) {
-              // If it supports the enumerable extension, try totalSupply again
-              const data = await publicClient.readContract({
-                address: contractData.contract_address as `0x${string}`,
-                abi: totalSupplyABI,
-                functionName: 'totalSupply',
-              });
+          if (onChainData) {
+            // Update contract with on-chain data
+            setContract(prevContract => {
+              if (!prevContract) return null;
               
-              setTotalSupply(Number(data));
-              const count = Math.min(Number(data), 12);
-              generateNFTs(count, contractData);
-              totalSupplyFound = true;
-              return; // If successful, exit early
+              return {
+                ...prevContract,
+                onChainData: {
+                  name: onChainData.name,
+                  symbol: onChainData.symbol,
+                  baseURI: onChainData.baseURI,
+                  totalSupply: onChainData.totalSupply,
+                  owner: onChainData.owner
+                }
+              };
+            });
+            
+            // Load initial NFTs based on totalSupply
+            if (onChainData.totalSupply && onChainData.totalSupply > 0) {
+              // Start loading NFTs with placeholders
+              const count = Math.min(onChainData.totalSupply, 12);
+              createNFTPlaceholders(count);
+              loadNFTData(count, contractData.contract_address, Number(contractData.chain_id));
+            } else {
+              // If no totalSupply or zero, create a few placeholder NFTs
+              createNFTPlaceholders(6);
+              setNftsLoading(false);
             }
-          } catch (err) {
-            // Silently handle this error - not all contracts support ERC165
-            // Don't log the warning as it's expected for many contracts
-          }
-          
-          // Approach 3: Try to use estimateGas to check if the function exists
-          try {
-            await publicClient.estimateContractGas({
-              address: contractData.contract_address as `0x${string}`,
-              abi: totalSupplyABI,
-              functionName: 'totalSupply',
-              account: address || '0x0000000000000000000000000000000000000000',
-            });
-            
-            // If estimateGas succeeds, try to call totalSupply again
-            const data = await publicClient.readContract({
-              address: contractData.contract_address as `0x${string}`,
-              abi: totalSupplyABI,
-              functionName: 'totalSupply',
-            });
-            
-            setTotalSupply(Number(data));
-            const count = Math.min(Number(data), 12);
-            generateNFTs(count, contractData);
-            totalSupplyFound = true;
-            return; // If successful, exit early
-          } catch (err) {
-            // Silently handle this error - not all contracts have totalSupply
-            // Don't log the warning as it's expected for many contracts
-          }
-          
-          // If we reach here, none of the approaches worked - use placeholders
-          if (!totalSupplyFound) {
-            // Use a quieter console info instead of a warning or error
-            console.info("Contract does not implement standard totalSupply, using placeholder NFTs");
-            setTotalSupply(placeholderCount);
-            generateNFTs(placeholderCount, contractData);
+          } else {
+            // If on-chain data couldn't be loaded, create placeholder NFTs
+            createNFTPlaceholders(6);
+            setNftsLoading(false);
           }
         } catch (err) {
-          console.error("General error fetching blockchain data:", err);
-          setTotalSupply(placeholderCount);
-          generateNFTs(placeholderCount, contractData);
+          console.error("Error fetching on-chain contract data:", err);
+          // If there's an error, still create placeholder NFTs
+          createNFTPlaceholders(6);
+          setNftsLoading(false);
         }
       }
     } catch (err: any) {
-      console.error("API error:", err);
-      setError(err.message || 'Failed to fetch contract details');
+      console.error("Error fetching contract:", err);
+      setError(err.message || 'Failed to load contract data');
+      setContractLoading(false);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
-  }, [contractId, publicClient, address]);
+  }, [contractId]);
 
+  // Load contract details when contractId changes
   useEffect(() => {
     if (contractId) {
       fetchContractDetails();
+    } else {
+      setInitialLoading(false);
     }
   }, [contractId, fetchContractDetails]);
 
-  // Helper function to generate NFT data 
-  const generateNFTs = (count: number, contractData: ContractData) => {
-    const nftData: NFTData[] = [];
-    for (let i = 0; i < count; i++) {
-      nftData.push({
-        id: i + 1,
-        name: `${contractData.name || 'NFT'} #${i + 1}`,
-        image: `https://picsum.photos/400/400?random=${i + 100 + Math.floor(Math.random() * 1000)}`,
-        description: `A beautiful NFT from the ${contractData.name} collection`,
-      });
+  // Create placeholder NFTs with loading state
+  const createNFTPlaceholders = (count: number) => {
+    const placeholders = Array(count).fill(0).map((_, index) => ({
+      id: index + 1,
+      name: `NFT #${index + 1}`,
+      image: `/placeholder-nft.png`, // Use a local placeholder image
+      description: 'Loading NFT data...',
+      isLoading: true
+    }));
+    
+    setNfts(placeholders);
+  };
+
+  // Load actual NFT data
+  const loadNFTData = async (count: number, contractAddress: string, chainId: number) => {
+    setNftsLoading(true);
+    
+    // Create array of promises to load NFT data in parallel
+    const tokenIds = Array.from({ length: count }, (_, i) => i + 1);
+    
+    try {
+      // Batch get token URIs using tbcNFTUtils
+      const tokenURIs = await tbcNFTUtils.batchGetTokenURIs(
+        contractAddress,
+        tbcNFTUtils.TBCNFT_ABI,
+        tokenIds,
+        chainId
+      );
+      
+      // Update each NFT with its data
+      const updatedNfts = await Promise.all(
+        tokenIds.map(async (tokenId) => {
+          try {
+            const tokenURI = tokenURIs[tokenId];
+            
+            if (!tokenURI) {
+              return {
+                id: tokenId,
+                name: `NFT #${tokenId}`,
+                image: `/placeholder-nft.png`,
+                description: 'No metadata available',
+                isLoading: false
+              };
+            }
+            
+            // Get actual NFT metadata from the tokenURI
+            let metadata;
+            try {
+              // Try to fetch the metadata from the tokenURI
+              const gatewayUrl = tbcNFTUtils.getIpfsGatewayUrl(tokenURI);
+              const response = await fetch(gatewayUrl);
+              metadata = await response.json();
+            } catch (err) {
+              console.warn(`Failed to fetch metadata for token ${tokenId}:`, err);
+              metadata = null;
+            }
+            
+            if (metadata) {
+              // Get image URL (either direct or IPFS)
+              let imageUrl = metadata.image || `/placeholder-nft.png`;
+              if (imageUrl.startsWith('ipfs://') || imageUrl.includes('/ipfs/')) {
+                imageUrl = tbcNFTUtils.getIpfsGatewayUrl(imageUrl);
+              }
+              
+              return {
+                id: tokenId,
+                name: metadata.name || `NFT #${tokenId}`,
+                image: imageUrl,
+                description: metadata.description || '',
+                attributes: metadata.attributes || [],
+                isLoading: false,
+                tokenURI
+              };
+            } else {
+              // Use placeholder for failed metadata
+              return {
+                id: tokenId,
+                name: `NFT #${tokenId}`,
+                image: `/placeholder-nft.png`,
+                description: 'Metadata unavailable',
+                isLoading: false,
+                tokenURI
+              };
+            }
+          } catch (err) {
+            console.error(`Error loading NFT #${tokenId}:`, err);
+            return {
+              id: tokenId,
+              name: `NFT #${tokenId}`,
+              image: `/placeholder-nft.png`,
+              description: 'Error loading NFT',
+              isLoading: false
+            };
+          }
+        })
+      );
+      
+      setNfts(updatedNfts);
+    } catch (err) {
+      console.error("Error loading NFT data:", err);
+    } finally {
+      setNftsLoading(false);
     }
-    setNfts(nftData);
   };
 
   const handleEditNFT = (id: number) => {
     console.log(`Edit NFT ${id}`);
-    // TODO: Implement NFT editing
+    // Implement edit functionality
   };
 
   const handleViewNFT = (id: number) => {
     console.log(`View NFT ${id}`);
-    // TODO: Implement NFT viewing
+    // Implement view functionality
   };
 
   const handleAddNFT = () => {
     console.log('Add new NFT');
-    // TODO: Implement add new NFT
+    // Implement add functionality
   };
 
-  // If no contract ID is provided, show a message to go to deployments
-  if (!contractId) {
-    return <EmptyState />;
-  }
-
-  if (loading) {
-    return <LoadingState />;
-  }
-
-  if (error) {
+  // Show error state if there was an error
+  if (error && !initialLoading) {
     return <ErrorState error={error} />;
   }
 
+  // Show empty state if no contract was selected
+  if (!contractId && !initialLoading) {
+    return <EmptyState />;
+  }
+
+  // Show loading state while initial data is loading
+  if (initialLoading) {
+    return <LoadingState />;
+  }
+
+  // Prefer on-chain data if available, fall back to database values
+  const name = contract?.onChainData?.name || contract?.name || '';
+  const symbol = contract?.onChainData?.symbol || contract?.symbol || '';
+  const baseURI = contract?.onChainData?.baseURI || contract?.base_uri || '';
+  const totalSupply = contract?.onChainData?.totalSupply || 0;
+  const chainId = Number(contract?.chain_id) || 0;
+
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Contract Details Banner */}
-      {contract && (
-        <div className="mb-8">
+      <div className="space-y-6">
+        {/* Contract details banner */}
+        {contract && (
           <ContractDetailsBanner
-            name={contract.name}
-            symbol={contract.symbol}
+            name={name}
+            symbol={symbol}
             contractAddress={contract.contract_address}
-            chainId={parseInt(contract.chain_id)}
-            baseUri={contract.base_uri}
+            chainId={chainId}
+            baseUri={baseURI}
             totalSupply={totalSupply}
             deployerAddress={contract.deployer_address}
+            isLoading={contractLoading}
           />
-        </div>
-      )}
+        )}
 
-      {/* NFT Gallery Section */}
-      <Card className="shadow">
-        <CardContent className="p-6">
-          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'grid' | 'list')}>
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-xl font-bold">NFT Collection</h2>
-                <p className="text-sm text-gray-500">Showing {nfts.length} of {totalSupply} NFTs</p>
+        {/* NFT list */}
+        <div className="bg-white rounded-lg border shadow-sm p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">NFT Collection</h2>
+            <div className="flex space-x-2">
+              {/* View mode toggle */}
+              <div className="bg-secondary/20 rounded-md p-1 flex">
+                <Button
+                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="px-2 h-8"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" />
+                  Grid
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="px-2 h-8"
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="h-4 w-4 mr-1" />
+                  List
+                </Button>
               </div>
-              
-              <div className="flex items-center space-x-2">
-                <TabsList className="grid w-[160px] grid-cols-2">
-                  <TabsTrigger value="grid">
-                    <LayoutGrid className="h-4 w-4 mr-2" />
-                    Gallery
-                  </TabsTrigger>
-                  <TabsTrigger value="list">
-                    <List className="h-4 w-4 mr-2" />
-                    List
-                  </TabsTrigger>
-                </TabsList>
-  
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <SlidersHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Sort by ID</DropdownMenuItem>
-                    <DropdownMenuItem>Sort by Name</DropdownMenuItem>
-                    <DropdownMenuItem>Filter...</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+
+              {/* Add NFT button */}
+              <Button onClick={handleAddNFT} size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add NFT
+              </Button>
             </div>
-            
-            {/* View Mode Content */}
-            <TabsContent value="grid" className="mt-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {nfts.map((nft) => (
-                  <NFTCard
-                    key={nft.id}
-                    id={nft.id}
-                    name={nft.name}
-                    image={nft.image}
-                    description={nft.description}
-                    onEdit={handleEditNFT}
-                    onView={handleViewNFT}
-                  />
-                ))}
-  
-                {/* Add New NFT Card */}
-                <AddNFTCard onClick={handleAddNFT} />
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="list" className="mt-0">
-              <NFTListView 
-                nfts={nfts} 
-                onEdit={handleEditNFT} 
-                onView={handleViewNFT} 
-                onAdd={handleAddNFT} 
-              />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+          </div>
+
+          {/* Show loading state for NFTs */}
+          {nftsLoading && nfts.length === 0 ? (
+            <NFTLoadingSkeleton count={6} />
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {nfts.map((nft) => (
+                <NFTCard
+                  key={nft.id}
+                  id={nft.id}
+                  name={nft.name}
+                  image={nft.image}
+                  description={nft.description}
+                  onEdit={handleEditNFT}
+                  onView={handleViewNFT}
+                  isLoading={nft.isLoading}
+                />
+              ))}
+              <AddNFTCard onClick={handleAddNFT} />
+            </div>
+          ) : (
+            <NFTListView
+              nfts={nfts}
+              onEdit={handleEditNFT}
+              onView={handleViewNFT}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 } 
