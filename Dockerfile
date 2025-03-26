@@ -20,12 +20,13 @@ COPY package.json package-lock.json ./
 # We'll rebuild them after all deps are installed
 RUN npm install --ignore-scripts --legacy-peer-deps
 
-# Detect architecture and install appropriate Tailwind binary
+# Install architecture-specific native dependencies for Alpine Linux (musl)
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
-      npm install @tailwindcss/oxide-linux-x64-musl; \
+      npm install @tailwindcss/oxide-linux-x64-musl lightningcss-linux-x64-musl; \
     elif [ "$(uname -m)" = "aarch64" ]; then \
-      npm install @tailwindcss/oxide-linux-arm64-musl; \
+      npm install @tailwindcss/oxide-linux-arm64-musl lightningcss-linux-arm64-musl; \
     fi
+
 # Rebuild any native modules that need compilation
 RUN npm rebuild
 
